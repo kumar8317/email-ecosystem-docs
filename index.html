@@ -1,0 +1,2047 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GHL Email Ecosystem — Architecture Guide</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #242836;
+    --border: #2e3348;
+    --text: #e1e4ed;
+    --text-muted: #8b90a5;
+    --accent: #6c8cff;
+    --accent2: #a78bfa;
+    --green: #4ade80;
+    --yellow: #facc15;
+    --orange: #fb923c;
+    --red: #f87171;
+    --cyan: #22d3ee;
+    --pink: #f472b6;
+    --radius: 10px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 0;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* ── NAV ── */
+  .topbar {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(15,17,23,.85);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 32px;
+    display: flex; align-items: center; gap: 18px;
+    overflow-x: auto;
+  }
+  .topbar .logo { font-weight: 700; font-size: 15px; color: var(--accent); white-space: nowrap; }
+  .topbar a { color: var(--text-muted); font-size: 13px; white-space: nowrap; transition: color .15s; }
+  .topbar a:hover { color: var(--text); text-decoration: none; }
+
+  /* ── HERO ── */
+  .hero {
+    text-align: center;
+    padding: 80px 32px 48px;
+    background: linear-gradient(180deg, rgba(108,140,255,.08) 0%, transparent 100%);
+  }
+  .hero h1 { font-size: clamp(28px,5vw,44px); font-weight: 800; letter-spacing: -.5px; }
+  .hero h1 span { background: linear-gradient(135deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .hero p { color: var(--text-muted); max-width: 640px; margin: 16px auto 0; font-size: 16px; }
+  .hero .badges { display: flex; gap: 10px; justify-content: center; margin-top: 24px; flex-wrap: wrap; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600;
+    background: var(--surface); border: 1px solid var(--border);
+  }
+  .badge .dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  /* ── LAYOUT ── */
+  .container { max-width: 1240px; margin: 0 auto; padding: 0 24px; }
+  section { padding: 56px 0; }
+  section + section { border-top: 1px solid var(--border); }
+  h2 {
+    font-size: 26px; font-weight: 700; margin-bottom: 8px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  h2 .icon { font-size: 22px; }
+  h3 { font-size: 18px; font-weight: 600; margin: 28px 0 12px; color: var(--accent); }
+  h4 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; color: var(--accent2); }
+  .section-desc { color: var(--text-muted); margin-bottom: 28px; max-width: 700px; }
+
+  /* ── CARDS ── */
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 22px; transition: border-color .2s;
+  }
+  .card:hover { border-color: var(--accent); }
+  .card .card-title { font-weight: 700; font-size: 15px; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+  .card .card-title .tag {
+    font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 4px;
+    text-transform: uppercase; letter-spacing: .5px;
+  }
+  .card p, .card li { font-size: 13.5px; color: var(--text-muted); }
+  .card ul { padding-left: 18px; margin-top: 6px; }
+  .card li { margin-bottom: 3px; }
+
+  /* ── TABLES ── */
+  .table-wrap { overflow-x: auto; margin: 12px 0; border-radius: var(--radius); border: 1px solid var(--border); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { background: var(--surface2); font-weight: 600; text-align: left; padding: 10px 14px; white-space: nowrap; color: var(--text-muted); text-transform: uppercase; font-size: 11px; letter-spacing: .5px; }
+  td { padding: 9px 14px; border-top: 1px solid var(--border); vertical-align: top; }
+  tr:hover td { background: rgba(108,140,255,.04); }
+  code, .mono {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 12px;
+    background: var(--surface2); padding: 2px 6px; border-radius: 4px;
+  }
+  td code { white-space: nowrap; }
+
+  /* ── TREE ── */
+  .tree { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 24px; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; line-height: 1.9; overflow-x: auto; white-space: pre; }
+  .tree .dir { color: var(--accent); font-weight: 600; }
+  .tree .file { color: var(--text-muted); }
+  .tree .comment { color: #555a70; }
+
+  /* ── FLOW DIAGRAM ── */
+  .flow-container { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 32px; overflow-x: auto; }
+  .flow-diagram { display: flex; flex-direction: column; gap: 24px; min-width: 900px; }
+  .flow-row { display: flex; align-items: center; gap: 12px; flex-wrap: nowrap; }
+  .flow-box {
+    padding: 10px 16px; border-radius: 8px; font-size: 12px; font-weight: 600;
+    white-space: nowrap; text-align: center; min-width: 120px;
+    border: 1px solid var(--border);
+  }
+  .flow-arrow { color: var(--text-muted); font-size: 18px; flex-shrink: 0; }
+  .flow-label { font-size: 10px; color: var(--text-muted); text-align: center; margin-top: 2px; }
+  .fb-fe { background: rgba(108,140,255,.12); border-color: var(--accent); color: var(--accent); }
+  .fb-be { background: rgba(167,139,250,.12); border-color: var(--accent2); color: var(--accent2); }
+  .fb-worker { background: rgba(74,222,128,.1); border-color: var(--green); color: var(--green); }
+  .fb-ext { background: rgba(251,146,60,.1); border-color: var(--orange); color: var(--orange); }
+  .fb-db { background: rgba(244,114,182,.1); border-color: var(--pink); color: var(--pink); }
+  .fb-pubsub { background: rgba(34,211,238,.1); border-color: var(--cyan); color: var(--cyan); }
+
+  /* ── SETUP CHECKLIST ── */
+  .checklist { list-style: none; padding: 0; }
+  .checklist li {
+    padding: 10px 16px; margin-bottom: 6px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    font-size: 13.5px; display: flex; align-items: flex-start; gap: 10px;
+  }
+  .checklist li .step {
+    background: var(--accent); color: #fff; font-size: 11px; font-weight: 700;
+    width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center;
+    justify-content: center; flex-shrink: 0; margin-top: 1px;
+  }
+  .checklist li code { font-size: 12px; }
+
+  /* ── LEGEND ── */
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  .legend-swatch { width: 14px; height: 14px; border-radius: 4px; }
+
+  /* ── COLLAPSIBLE ── */
+  details { margin-bottom: 12px; }
+  summary {
+    cursor: pointer; font-weight: 600; font-size: 14px; padding: 12px 16px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    list-style: none; display: flex; align-items: center; gap: 8px;
+    transition: background .15s;
+  }
+  summary:hover { background: var(--surface2); }
+  summary::before { content: '▸'; transition: transform .2s; display: inline-block; }
+  details[open] summary::before { transform: rotate(90deg); }
+  details[open] summary { border-radius: var(--radius) var(--radius) 0 0; }
+  .details-body { padding: 16px; background: var(--surface); border: 1px solid var(--border); border-top: 0; border-radius: 0 0 var(--radius) var(--radius); }
+
+  /* ── SVG DIAGRAMS ── */
+  .svg-diagram-wrap {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 24px; overflow-x: auto; margin: 16px 0 24px;
+  }
+  .svg-diagram-wrap svg { display: block; margin: 0 auto; }
+  .svg-diagram-wrap svg text { font-family: 'Inter', -apple-system, sans-serif; }
+  .diagram-title {
+    font-size: 13px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;
+    letter-spacing: .5px; margin-bottom: 12px; text-align: center;
+  }
+
+  /* ── TOC ── */
+  .toc { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; margin: 20px 0; }
+  .toc a {
+    display: block; padding: 10px 14px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; font-size: 13px; transition: all .15s;
+  }
+  .toc a:hover { border-color: var(--accent); background: var(--surface2); text-decoration: none; }
+  .toc .num { color: var(--accent); font-weight: 700; margin-right: 6px; }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 640px) {
+    .card-grid { grid-template-columns: 1fr; }
+    .hero { padding: 48px 16px 32px; }
+    .container { padding: 0 16px; }
+    .topbar { padding: 10px 16px; }
+  }
+
+  /* ── SEQUENCE DIAGRAM (CSS-only) ── */
+  .seq-diagram { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; overflow-x: auto; }
+  .seq-row { display: flex; align-items: stretch; min-height: 42px; position: relative; }
+  .seq-actor { width: 130px; flex-shrink: 0; text-align: center; font-size: 11px; font-weight: 700; padding: 8px 4px; }
+  .seq-line { flex: 1; position: relative; display: flex; align-items: center; justify-content: center; }
+  .seq-line::before { content: ''; position: absolute; top: 50%; left: 0; right: 0; height: 1px; background: var(--border); }
+  .seq-msg {
+    position: relative; z-index: 1; font-size: 11px; padding: 3px 10px; border-radius: 4px;
+    background: var(--surface2); border: 1px solid var(--border); white-space: nowrap;
+  }
+  .seq-header .seq-actor { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; font-size: 12px; }
+  .seq-divider { text-align: center; padding: 8px; font-size: 11px; color: var(--text-muted); font-weight: 600; border-top: 1px dashed var(--border); margin: 8px 0; }
+</style>
+</head>
+<body>
+
+<!-- ════════════════ TOPBAR ════════════════ -->
+<nav class="topbar">
+  <div class="logo">📧 Email Ecosystem</div>
+  <a href="#overview">Overview</a>
+  <a href="#repos">Repositories</a>
+  <a href="#architecture">Architecture</a>
+  <a href="#frontend">Frontend</a>
+  <a href="#backend">Backend</a>
+  <a href="#workers">Workers</a>
+  <a href="#pubsub">PubSub</a>
+  <a href="#data">Data Layer</a>
+    <a href="#flows">Flow Diagrams</a>
+  <a href="#services">Service Map</a>
+  <a href="#env">Environment</a>
+  <a href="#setup">Dev Setup</a>
+</nav>
+
+<!-- ════════════════ HERO ════════════════ -->
+<div class="hero">
+  <h1><span>GHL Email Ecosystem</span><br>Architecture Guide</h1>
+  <p>Complete onboarding reference for the email platform — frontend apps, backend services, workers, PubSub topics, database models, and inter-service communication.</p>
+  <div class="badges">
+    <div class="badge"><div class="dot" style="background:var(--accent)"></div> 4 Frontend Apps</div>
+    <div class="badge"><div class="dot" style="background:var(--accent2)"></div> 1 Backend Monorepo</div>
+    <div class="badge"><div class="dot" style="background:var(--green)"></div> 10+ Workers</div>
+    <div class="badge"><div class="dot" style="background:var(--cyan)"></div> 10+ PubSub Topics</div>
+    <div class="badge"><div class="dot" style="background:var(--pink)"></div> 20+ Mongo Collections</div>
+    <div class="badge"><div class="dot" style="background:var(--orange)"></div> 12+ External Services</div>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- ════════════════ TABLE OF CONTENTS ════════════════ -->
+<section id="toc">
+  <h2><span class="icon">📑</span> Table of Contents</h2>
+  <div class="toc">
+    <a href="#overview"><span class="num">01</span> System Overview</a>
+    <a href="#repos"><span class="num">02</span> Repositories</a>
+    <a href="#architecture"><span class="num">03</span> High-Level Architecture</a>
+    <a href="#frontend"><span class="num">04</span> Frontend (ghl-email-builder)</a>
+    <a href="#backend"><span class="num">05</span> Backend (emails app)</a>
+    <a href="#workers"><span class="num">06</span> Workers & Async Processing</a>
+    <a href="#pubsub"><span class="num">07</span> PubSub Topic Map</a>
+    <a href="#data"><span class="num">08</span> Data Layer & Models</a>
+    <a href="#flows"><span class="num">09</span> Flow Diagrams (8 flows)</a>
+    <a href="#services"><span class="num">10</span> External Service Map</a>
+    <a href="#env"><span class="num">11</span> Environment & Config</a>
+    <a href="#setup"><span class="num">12</span> New Developer Setup</a>
+  </div>
+</section>
+
+<!-- ════════════════ 01 OVERVIEW ════════════════ -->
+<section id="overview">
+  <h2><span class="icon">🔭</span> 01 — System Overview</h2>
+  <p class="section-desc">The email ecosystem spans a Vue 3 micro-frontend monorepo (ghl-email-builder) for the UI, a NestJS monorepo (leadgen-marketplace-backend) for the API + workers, and several external platform services for sending, bulk actions, contacts, and tracking.</p>
+
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-title">🖥️ Frontend Layer <span class="tag" style="background:rgba(108,140,255,.2);color:var(--accent);">Vue 3</span></div>
+      <p>4 apps in <code>ghl-email-builder</code> monorepo:</p>
+      <ul>
+        <li><strong>email-home</strong> — Campaign/sequence/template listings, stats</li>
+        <li><strong>email-builder</strong> — Drag-and-drop visual email editor</li>
+        <li><strong>email-preview</strong> — Template preview + version comparison</li>
+        <li><strong>default-emails</strong> — Default template management</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-title">⚙️ Backend Layer <span class="tag" style="background:rgba(167,139,250,.2);color:var(--accent2);">NestJS</span></div>
+      <p>Emails app in <code>leadgen-marketplace-backend</code>:</p>
+      <ul>
+        <li><strong>API server</strong> — 15+ controllers, port 5076, route <code>/emails</code></li>
+        <li><strong>10+ workers</strong> — PubSub subscribers for async tasks</li>
+        <li><strong>Sibling apps</strong> — email-ai, tracking-link, countdown-timer</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-title">🔗 External Services <span class="tag" style="background:rgba(251,146,60,.2);color:var(--orange);">Istio Mesh</span></div>
+      <p>Connected via <code>InternalRequest</code> + service discovery:</p>
+      <ul>
+        <li><strong>Conversations</strong> — Actual email sending + unsubscribe</li>
+        <li><strong>Bulk Actions</strong> — Mass email dispatch orchestration</li>
+        <li><strong>Contacts</strong> — Recipient data + smart lists</li>
+        <li><strong>Tracking Link</strong> — Click tracking + analytics</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-title">💾 Data Stores <span class="tag" style="background:rgba(244,114,182,.2);color:var(--pink);">Multi-DB</span></div>
+      <ul>
+        <li><strong>MongoDB</strong> — Primary data (templates, schedules, sequences, stats)</li>
+        <li><strong>ClickHouse</strong> — Analytics (trigger events, product stats, reporting rollups)</li>
+        <li><strong>Redis</strong> — Caching (tracking links, sessions)</li>
+        <li><strong>GCS</strong> — Asset storage (snapshots, images)</li>
+        <li><strong>Cloud Tasks</strong> — Delayed sequence execution</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════ 02 REPOS ════════════════ -->
+<section id="repos">
+  <h2><span class="icon">📂</span> 02 — Repositories</h2>
+  <p class="section-desc">All code lives in two primary repos with a few satellite repos for specialized tools.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Repo</th><th>Type</th><th>Path</th><th>Key Apps / Role</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>ghl-email-builder</strong></td>
+          <td><span class="badge" style="border-color:var(--accent)"><div class="dot" style="background:var(--accent)"></div>Frontend</span></td>
+          <td><code>~/projects/ghl-email-builder</code></td>
+          <td>email-home, email-builder, email-preview, default-emails</td>
+        </tr>
+        <tr>
+          <td><strong>leadgen-marketplace-backend</strong></td>
+          <td><span class="badge" style="border-color:var(--accent2)"><div class="dot" style="background:var(--accent2)"></div>Backend</span></td>
+          <td><code>~/projects/leadgen-marketplace-backend</code></td>
+          <td>apps/emails (API + workers), apps/email-ai, apps/tracking-link, apps/countdown-timer</td>
+        </tr>
+        <tr>
+          <td><strong>ghl-email-components</strong></td>
+          <td><span class="badge" style="border-color:var(--text-muted)"><div class="dot" style="background:var(--text-muted)"></div>Shared</span></td>
+          <td><code>~/projects/ghl-email-components</code></td>
+          <td>Shared email UI components / MJML elements</td>
+        </tr>
+        <tr>
+          <td><strong>leadgen-tests</strong></td>
+          <td><span class="badge" style="border-color:var(--green)"><div class="dot" style="background:var(--green)"></div>E2E</span></td>
+          <td><code>~/projects/leadgen-tests</code></td>
+          <td>E2E / integration test suites for the email platform</td>
+        </tr>
+        <tr>
+          <td><strong>spm-ts</strong></td>
+          <td><span class="badge" style="border-color:var(--yellow)"><div class="dot" style="background:var(--yellow)"></div>Shell</span></td>
+          <td><code>~/projects/spm-ts</code></td>
+          <td>GHL app shell — hosts email MFAs via Module Federation / iframe</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ════════════════ 03 ARCHITECTURE ════════════════ -->
+<section id="architecture">
+  <h2><span class="icon">🏗️</span> 03 — High-Level Architecture</h2>
+  <p class="section-desc">End-to-end request flow from browser to data stores. The frontend apps communicate with the emails API through the GHL API gateway; the backend delegates heavy work to PubSub workers and external services.</p>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-swatch" style="background:rgba(108,140,255,.3);border:1px solid var(--accent)"></div> Frontend</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:rgba(167,139,250,.3);border:1px solid var(--accent2)"></div> Backend API</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:rgba(74,222,128,.2);border:1px solid var(--green)"></div> Worker</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:rgba(34,211,238,.2);border:1px solid var(--cyan)"></div> PubSub</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:rgba(251,146,60,.2);border:1px solid var(--orange)"></div> External Service</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:rgba(244,114,182,.2);border:1px solid var(--pink)"></div> Data Store</div>
+  </div>
+
+  <div class="flow-container">
+    <div class="flow-diagram">
+      <!-- Row 1: Browser → Frontend -->
+      <div style="text-align:center;font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:-12px;">BROWSER LAYER</div>
+      <div class="flow-row">
+        <div class="flow-box fb-fe">spm-ts Shell</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box fb-fe">email-home<div class="flow-label">listings / campaigns</div></div>
+        <div class="flow-arrow">↔</div>
+        <div class="flow-box fb-fe">email-builder<div class="flow-label">Postmate iframe</div></div>
+        <div class="flow-arrow">↔</div>
+        <div class="flow-box fb-fe">email-preview<div class="flow-label">Module Federation</div></div>
+        <div class="flow-arrow" style="margin-left:20px;">|</div>
+        <div class="flow-box fb-fe" style="opacity:.7">default-emails<div class="flow-label">MF remote</div></div>
+      </div>
+
+      <!-- Row 2: API Gateway -->
+      <div style="text-align:center;font-size:20px;color:var(--text-muted);">⬇ HTTP (axios via marketPlaceURL) ⬇</div>
+
+      <div style="text-align:center;font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:-12px;">API LAYER — <code>leadgen-marketplace-backend/apps/emails</code> (port 5076)</div>
+      <div class="flow-row" style="flex-wrap:wrap; gap:8px;">
+        <div class="flow-box fb-be">BuilderController<div class="flow-label">/emails/builder</div></div>
+        <div class="flow-box fb-be">ScheduleController<div class="flow-label">/emails/schedule</div></div>
+        <div class="flow-box fb-be">SequenceController<div class="flow-label">/emails/sequences</div></div>
+        <div class="flow-box fb-be">CampaignsController<div class="flow-label">/emails/campaigns</div></div>
+        <div class="flow-box fb-be">StatsController<div class="flow-label">/emails/stats</div></div>
+        <div class="flow-box fb-be">TrackingController<div class="flow-label">/emails/tracking</div></div>
+        <div class="flow-box fb-be">TriggerController<div class="flow-label">/emails/trigger</div></div>
+        <div class="flow-box fb-be" style="opacity:.7">+8 more</div>
+      </div>
+
+      <!-- Row 3: PubSub -->
+      <div style="display:flex;gap:24px;align-items:flex-start;">
+        <div style="flex:1;">
+          <div style="text-align:center;font-size:20px;color:var(--text-muted);">⬇ GCP PubSub ⬇</div>
+          <div class="flow-row" style="flex-wrap:wrap;gap:8px;">
+            <div class="flow-box fb-pubsub" style="font-size:10px;">campaign-trigger-events</div>
+            <div class="flow-box fb-pubsub" style="font-size:10px;">campaign-schedule-events</div>
+            <div class="flow-box fb-pubsub" style="font-size:10px;">sequences-trigger-action</div>
+            <div class="flow-box fb-pubsub" style="font-size:10px;">reporting-stats-events</div>
+            <div class="flow-box fb-pubsub" style="font-size:10px;">snapshot-queue</div>
+            <div class="flow-box fb-pubsub" style="font-size:10px;">stats-export-events</div>
+            <div class="flow-box fb-pubsub" style="font-size:10px;">action-precompute</div>
+            <div class="flow-box fb-pubsub" style="font-size:10px;">integration-events</div>
+          </div>
+        </div>
+        <div style="flex:0 0 auto;text-align:center;font-size:20px;color:var(--text-muted);padding-top:10px;">
+          ⟶ Istio Mesh ⟶
+        </div>
+        <div style="flex:0 0 auto;">
+          <div class="flow-row" style="flex-wrap:wrap;gap:8px;">
+            <div class="flow-box fb-ext">Conversations API<div class="flow-label">send email</div></div>
+            <div class="flow-box fb-ext">Bulk Actions API<div class="flow-label">mass dispatch</div></div>
+            <div class="flow-box fb-ext">Contacts API<div class="flow-label">recipients</div></div>
+            <div class="flow-box fb-ext">Tracking Link API<div class="flow-label">click tracking</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Row 4: Workers -->
+      <div style="text-align:center;font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:-12px;">WORKER LAYER (PubSub Subscribers)</div>
+      <div class="flow-row" style="flex-wrap:wrap;gap:8px;">
+        <div class="flow-box fb-worker" style="font-size:10px;">trigger-event-worker</div>
+        <div class="flow-box fb-worker" style="font-size:10px;">campaign-stats-worker</div>
+        <div class="flow-box fb-worker" style="font-size:10px;">sequences-trigger-worker</div>
+        <div class="flow-box fb-worker" style="font-size:10px;">campaign-schedule-worker</div>
+        <div class="flow-box fb-worker" style="font-size:10px;">integration-worker</div>
+        <div class="flow-box fb-worker" style="font-size:10px;">precompute-worker</div>
+        <div class="flow-box fb-worker" style="font-size:10px;">stats-export-worker</div>
+        <div class="flow-box fb-worker" style="font-size:10px;">snapshot-worker</div>
+        <div class="flow-box fb-worker" style="font-size:10px;">product-stats-worker</div>
+        <div class="flow-box fb-worker" style="font-size:10px;">tracking-link-worker</div>
+      </div>
+
+      <!-- Row 5: Data -->
+      <div style="text-align:center;font-size:20px;color:var(--text-muted);">⬇ Read / Write ⬇</div>
+      <div class="flow-row" style="flex-wrap:wrap;gap:8px;">
+        <div class="flow-box fb-db">MongoDB (standard)<div class="flow-label">Schedule, EmailBuilder</div></div>
+        <div class="flow-box fb-db">MongoDB (leadgen)<div class="flow-label">Sequences, Settings, Triggers…</div></div>
+        <div class="flow-box fb-db">ClickHouse<div class="flow-label">Stats, Trigger Events, Rollups</div></div>
+        <div class="flow-box fb-db">Redis<div class="flow-label">Cache, Tracking Links</div></div>
+        <div class="flow-box fb-db">GCS<div class="flow-label">Assets, Snapshots</div></div>
+        <div class="flow-box fb-db">Cloud Tasks<div class="flow-label">Delayed Sequences</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════ 04 FRONTEND ════════════════ -->
+<section id="frontend">
+  <h2><span class="icon">🖼️</span> 04 — Frontend: ghl-email-builder</h2>
+  <p class="section-desc">A Lerna monorepo with 4 deployable apps + a shared common package. Uses Vue 3, Vuex 4, Tailwind, and Highrise design system. Apps communicate via Postmate (iframe) and Module Federation.</p>
+
+  <h3>Repository Structure</h3>
+  <div class="tree"><span class="dir">ghl-email-builder/</span>
+├── <span class="dir">apps/</span>
+│   ├── <span class="dir">email-home/</span>        <span class="comment"># Vite — campaigns, sequences, template listings</span>
+│   │   ├── src/router.ts    <span class="comment"># Full route table</span>
+│   │   ├── src/store/       <span class="comment"># Vuex — iframeState, user context</span>
+│   │   └── src/service/     <span class="comment"># API layer → marketPlaceURL</span>
+│   ├── <span class="dir">email-builder/</span>    <span class="comment"># Vite — drag-and-drop email editor</span>
+│   │   ├── src/page/Builder.vue
+│   │   ├── src/components/  <span class="comment"># elements, side-panel, chatbot (AI)</span>
+│   │   └── src/store/       <span class="comment"># Vuex — elements, attrs, history, AB test</span>
+│   ├── <span class="dir">email-preview/</span>    <span class="comment"># Webpack + Module Federation</span>
+│   │   ├── webpack.config.js <span class="comment"># exposes: ./App, ./ImportTemplate</span>
+│   │   └── src/router.ts    <span class="comment"># builder, versions, preview, render</span>
+│   ├── <span class="dir">default-emails/</span>   <span class="comment"># Webpack + Module Federation</span>
+│   │   └── webpack.config.js <span class="comment"># exposes: ./List</span>
+│   └── <span class="dir">common/</span>           <span class="comment"># Shared TS: services, config, locales, utils</span>
+│       ├── service/index.ts <span class="comment"># useService() factory — axios + marketPlaceURL</span>
+│       └── config/          <span class="comment"># merge-tag helpers</span>
+├── deployments/             <span class="comment"># beta / staging / production</span>
+├── package.json             <span class="comment"># workspaces: apps/*</span>
+└── lerna.json</div>
+
+  <h3>App Details</h3>
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-title">📋 email-home <span class="tag" style="background:rgba(108,140,255,.2);color:var(--accent);">Vite</span> <span class="tag" style="background:rgba(74,222,128,.15);color:var(--green);">Port 3003</span></div>
+      <p>Marketing emails hub — lists templates, campaigns, sequences. Full route table with statistics views.</p>
+      <h4>Routes</h4>
+      <ul>
+        <li><code>/location/:id/marketing/emails</code> → Template list (all / scheduled / statistics)</li>
+        <li><code>/location/:id/marketing/emails/settings</code> → Email settings</li>
+        <li><code>/location/:id/emails/campaigns/create</code> → Create campaign (+ schedule, preview, versions)</li>
+        <li><code>/location/:id/emails/sequences/create/:seqId</code> → Sequence editor</li>
+        <li><code>/location/:id/marketing/emails/:source/:sourceId/statistics</code> → Campaign stats</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-title">✏️ email-builder <span class="tag" style="background:rgba(108,140,255,.2);color:var(--accent);">Vite</span> <span class="tag" style="background:rgba(74,222,128,.15);color:var(--green);">Port 3002</span></div>
+      <p>Drag-and-drop visual email editor. Loaded as iframe via Postmate handshake from email-home. No routes — single canvas surface.</p>
+      <h4>Key Components</h4>
+      <ul>
+        <li><code>page/Builder.vue</code> — Main canvas wiring</li>
+        <li><code>components/builder/</code> — Section, Elements, overlays, skeleton</li>
+        <li><code>components/elements/</code> — Text, image, logo, countdown, code, cart blocks</li>
+        <li><code>components/side-panel/</code> — Style manager, template settings, saved blocks</li>
+        <li><code>components/chatbot/</code> — Email AI assist mode</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-title">👁️ email-preview <span class="tag" style="background:rgba(167,139,250,.2);color:var(--accent2);">Webpack</span> <span class="tag" style="background:rgba(251,146,60,.15);color:var(--orange);">MF Remote</span></div>
+      <p>Template preview, version diff, and template rendering. Exposed as Module Federation remote <code>emailPreviewApp</code>.</p>
+      <h4>MF Exposes</h4>
+      <ul>
+        <li><code>./App</code> → App.vue</li>
+        <li><code>./ImportTemplate</code> → ImportTemplate page</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-title">📄 default-emails <span class="tag" style="background:rgba(167,139,250,.2);color:var(--accent2);">Webpack</span> <span class="tag" style="background:rgba(251,146,60,.15);color:var(--orange);">MF Remote</span></div>
+      <p>Default template management. Exposed as Module Federation remote <code>defaultEmailTemplatesApp</code>.</p>
+      <h4>MF Exposes</h4>
+      <ul>
+        <li><code>./List</code> → Home.vue</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Shared Packages</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Package</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>@platform-ui/highrise</code></td><td>Design system (Naive UI fork) — primary component library</td></tr>
+        <tr><td><code>@platform-ui/ghl-ui</code></td><td>Legacy component library (still in email-home, builder, preview)</td></tr>
+        <tr><td><code>@gohighlevel/ghl-icons</code></td><td>Icon library</td></tr>
+        <tr><td><code>@gohighlevel/ghl-text-editor</code></td><td>Rich text editor for email builder</td></tr>
+        <tr><td><code>@ghl-plugins/tailwind-prefix-wrapper</code></td><td>Tailwind scoping to avoid MFA style conflicts</td></tr>
+        <tr><td><code>@platform-ui/bundle-metrics</code></td><td>Build analytics and bundle size tracking</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>State Management (Vuex 4)</h3>
+  <details>
+    <summary>email-builder store shape</summary>
+    <div class="details-body">
+      <p>Key state fields in <code>apps/email-builder/src/store/state.ts</code>:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Field</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td><code>elements</code></td><td>Array of email blocks on the canvas</td></tr>
+            <tr><td><code>attrs</code></td><td>Active element attribute map</td></tr>
+            <tr><td><code>activeElement</code></td><td>Currently selected element</td></tr>
+            <tr><td><code>templateId / locationId</code></td><td>Current template context</td></tr>
+            <tr><td><code>templateSettings</code></td><td>Template-level settings (global styles, etc.)</td></tr>
+            <tr><td><code>historyPosition / historyQueue</code></td><td>Undo/redo state</td></tr>
+            <tr><td><code>editorType</code></td><td>Builder mode (drag-and-drop vs code)</td></tr>
+            <tr><td><code>ABTestInfo / ABTestVariationsTemplateData</code></td><td>A/B test state for campaigns</td></tr>
+            <tr><td><code>builderErrors</code></td><td>Validation errors</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </details>
+  <details>
+    <summary>email-home store shape</summary>
+    <div class="details-body">
+      <p>Key state fields in <code>apps/email-home/src/store/state.ts</code>:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Field</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td><code>iframeState</code></td><td>Postmate handshake state (controls builder iframe)</td></tr>
+            <tr><td><code>builderState</code></td><td>Synced builder context</td></tr>
+            <tr><td><code>userId / apiKey / tokenId</code></td><td>Auth credentials (from spm-ts shell)</td></tr>
+            <tr><td><code>customFieldsLocation</code></td><td>Location custom fields for merge tags</td></tr>
+            <tr><td><code>companyStripePlan</code></td><td>Feature gating by plan</td></tr>
+            <tr><td><code>useNewBulkAPI</code></td><td>Flag to use v2 bulk actions</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </details>
+</section>
+
+<!-- ════════════════ 05 BACKEND ════════════════ -->
+<section id="backend">
+  <h2><span class="icon">⚙️</span> 05 — Backend: emails app</h2>
+  <p class="section-desc">NestJS app under <code>leadgen-marketplace-backend/apps/emails</code>. Global route prefix <code>/emails</code>, port <code>5076</code>. 14 feature modules with 15+ controllers.</p>
+
+  <h3>Directory Structure</h3>
+  <div class="tree"><span class="dir">leadgen-marketplace-backend/apps/emails/</span>
+├── <span class="dir">src/</span>
+│   ├── main.ts              <span class="comment"># Nest bootstrap, MJML + Handlebars setup</span>
+│   ├── emails.module.ts     <span class="comment"># Root module — imports all feature modules</span>
+│   ├── <span class="dir">builder/</span>            <span class="comment"># Template CRUD, versions, snapshots, AI, share</span>
+│   │   ├── controllers/
+│   │   ├── models/
+│   │   └── builder.service.ts
+│   ├── <span class="dir">schedule/</span>           <span class="comment"># Campaign scheduling, AB tests, resend, RSS</span>
+│   │   ├── schedule.controller.ts
+│   │   ├── schedule.service.ts
+│   │   └── notify.service.ts
+│   ├── <span class="dir">sequences/</span>          <span class="comment"># Sequence lifecycle, actions, executions</span>
+│   │   ├── sequence.controller.ts
+│   │   └── services/
+│   ├── <span class="dir">campaigns/</span>          <span class="comment"># Campaign listing, workflow sync, bulk-action campaigns</span>
+│   ├── <span class="dir">stats/</span>              <span class="comment"># Stats APIs, ClickHouse queries, export jobs</span>
+│   ├── <span class="dir">trigger/</span>            <span class="comment"># Campaign triggers, bulk tag PubSub</span>
+│   ├── <span class="dir">tracking/</span>           <span class="comment"># Tracking link injection + cache</span>
+│   ├── <span class="dir">webhook/</span>            <span class="comment"># Inbound import webhooks</span>
+│   ├── <span class="dir">attribution/</span>        <span class="comment"># Email attribution records</span>
+│   ├── <span class="dir">default-emails/</span>     <span class="comment"># Default template settings</span>
+│   ├── <span class="dir">otp-verification/</span>   <span class="comment"># Sender OTP via EMAIL_ISV_API</span>
+│   ├── <span class="dir">formSubmission/</span>     <span class="comment"># Form data linked to builder</span>
+│   ├── <span class="dir">builder-elements/</span>   <span class="comment"># Saved reusable drag-and-drop elements</span>
+│   ├── <span class="dir">import-template/</span>    <span class="comment"># Third-party template import</span>
+│   ├── <span class="dir">email-migration/</span>    <span class="comment"># Migration status per location</span>
+│   └── <span class="dir">util/</span>
+│       ├── service/         <span class="comment"># API clients: conversations, bulk-actions, emails, contacts</span>
+│       ├── constHelper.ts   <span class="comment"># PubSub topic names, message types</span>
+│       ├── helper.ts        <span class="comment"># Shared logic, Pendo events, snapshot publishing</span>
+│       ├── scheduleHelper.ts <span class="comment"># Bulk action v1/v2, AB helpers</span>
+│       └── builderHelper.ts
+├── <span class="dir">workers/</span>              <span class="comment"># 10 PubSub worker entry files</span>
+├── <span class="dir">deployments/</span>          <span class="comment"># Helm values per worker + server</span>
+└── <span class="dir">test/</span>                 <span class="comment"># Jest unit + integration tests</span></div>
+
+  <h3>Controllers & Routes</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Controller</th><th>Route Prefix</th><th>Key Endpoints</th></tr></thead>
+      <tbody>
+        <tr><td><strong>BuilderController</strong></td><td><code>/emails/builder</code></td><td>Template CRUD, settings, HTML/MJML, versions, snapshots, clone, share, AI chat, folders, import, unsubscribe/resubscribe</td></tr>
+        <tr><td><strong>TemplatesPublicV2</strong></td><td><code>/emails/public/v2/locations/:id/templates</code></td><td>Public API v2 — template CRUD, import, folders</td></tr>
+        <tr><td><strong>ScheduleController</strong></td><td><code>/emails/schedule</code></td><td>Campaign CRUD, start, pause/resume/cancel, AB tests, resend, RSS, preview, clone, folders, best-send-time</td></tr>
+        <tr><td><strong>SequenceController</strong></td><td><code>/emails/sequences</code></td><td>Sequence CRUD, actions CRUD, executions, start/pause/resume, folders, triggers, bulk update</td></tr>
+        <tr><td><strong>CampaignsController</strong></td><td><code>/emails/campaigns</code></td><td>Campaign listing, workflows, bulk-action campaigns</td></tr>
+        <tr><td><strong>CampaignsPublicV2</strong></td><td><code>/emails/public/v2/locations/:id/campaigns</code></td><td>Public API v2 — campaign CRUD, schedule, emails list</td></tr>
+        <tr><td><strong>StatsController</strong></td><td><code>/emails/stats</code></td><td>Location stats, daily stats, webinar/sequence stats, export</td></tr>
+        <tr><td><strong>TriggerController</strong></td><td><code>/emails/trigger</code></td><td>Campaign triggers, clone, bulk</td></tr>
+        <tr><td><strong>TrackingController</strong></td><td><code>/emails/tracking</code></td><td>Update HTML links, link registry, cache invalidation</td></tr>
+        <tr><td><strong>WebhookController</strong></td><td><code>/emails/webhook</code></td><td>Inbound import webhooks</td></tr>
+        <tr><td><strong>ImportTemplateController</strong></td><td><code>/emails/import-template</code></td><td>Third-party template import + feedback</td></tr>
+        <tr><td><strong>AttributionController</strong></td><td><code>/emails/attribution</code></td><td>Attribution records + stats</td></tr>
+        <tr><td><strong>DefaultEmailsController</strong></td><td><code>/emails/default-emails</code></td><td>Default templates + settings</td></tr>
+        <tr><td><strong>OtpVerificationController</strong></td><td><code>/emails/otp-verification</code></td><td>Send/verify OTP for sender email</td></tr>
+        <tr><td><strong>FormSubmissionController</strong></td><td><code>/emails/forms</code></td><td>Form submission store/read</td></tr>
+        <tr><td><strong>BuilderElementsController</strong></td><td><code>/emails/saved-element</code></td><td>Saved reusable elements CRUD</td></tr>
+        <tr><td><strong>EmailMigrationController</strong></td><td><code>/emails/email-migration</code></td><td>Migration status CRUD</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Services — Responsibility Map</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Service</th><th>Responsibility</th><th>Key External Calls</th></tr></thead>
+      <tbody>
+        <tr><td><code>builder.service</code></td><td>Template CRUD, versions, HTML/MJML rendering, snapshots, share links, AI chat integration</td><td>EMAIL_AI_API, PubSub (snapshots, unsubscribe)</td></tr>
+        <tr><td><code>schedule.service</code></td><td>Campaign scheduling, AB tests, resend, RSS campaigns, bulk send orchestration</td><td>BULK_ACTIONS_API (v1 + v2), EMAILS_API, FORMS_API, Cloud Tasks</td></tr>
+        <tr><td><code>campaigns.service</code></td><td>Campaign listing (workflows + bulk-action campaigns), template sync</td><td>BULK_ACTIONS_API (list)</td></tr>
+        <tr><td><code>sequence.service</code></td><td>Sequence lifecycle, scheduling, folder management</td><td>Cloud Tasks</td></tr>
+        <tr><td><code>sequence-action.service</code></td><td>Sequence step/action management, bulk updates, email sending</td><td><strong>CONVERSATIONS_MESSAGES_INTERNAL_API</strong> (POST /messages — actual send)</td></tr>
+        <tr><td><code>stats.service</code></td><td>Campaign/sequence/webinar stats (Mongo + ClickHouse)</td><td>CONVERSATIONS_REPORTING_API</td></tr>
+        <tr><td><code>stats-export.service</code></td><td>Async stats export jobs</td><td>PubSub → stats-export-events</td></tr>
+        <tr><td><code>trigger.service</code></td><td>Campaign triggers, bulk tag dispatching</td><td>PubSub → campaign-trigger-events</td></tr>
+        <tr><td><code>tracking.service</code></td><td>Tracking link injection, link registry, cache management</td><td>TRACKING_LINK_API</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Sibling Apps (same monorepo, registered as separate workers)</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>App Path</th><th>Role</th></tr></thead>
+      <tbody>
+        <tr><td><code>apps/email-ai</code></td><td>AI worker — email content generation, subject line suggestions</td></tr>
+        <tr><td><code>apps/tracking-link</code></td><td>Tracking link worker — click tracking → ClickHouse / cache</td></tr>
+        <tr><td><code>apps/countdown-timer</code></td><td>Countdown timer worker — timer widget asset generation</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ════════════════ 06 WORKERS ════════════════ -->
+<section id="workers">
+  <h2><span class="icon">🔄</span> 06 — Workers & Async Processing</h2>
+  <p class="section-desc">All workers are separate NestJS bootstrap apps under <code>apps/emails/workers/</code>. Each subscribes to a GCP PubSub topic and processes messages asynchronously. Deployed as independent K8s pods.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Worker</th><th>PubSub Subscription</th><th>Processes</th><th>Side Effects</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>trigger-event-worker</strong></td>
+          <td><code>leadgen-emails-campaign-trigger-events-sub</code></td>
+          <td>Campaign events + bulk tag dispatching</td>
+          <td>ClickHouse writes, Contacts API (tag add), BULK_ACTIONS_API (bulk-tag-add-v2)</td>
+        </tr>
+        <tr>
+          <td><strong>campaign-stats-worker</strong></td>
+          <td><code>leadgen-emails-reporting-stats-events-sub</code></td>
+          <td>Aggregate campaign stats, thread enrichment</td>
+          <td>ClickHouse writes, Conversations API (get message), may publish → sequences-trigger-action</td>
+        </tr>
+        <tr>
+          <td><strong>sequences-trigger-action-worker</strong></td>
+          <td><code>leadgen-emails-sequences-trigger-action-events-sub</code></td>
+          <td>Execute sequence steps</td>
+          <td>Cloud Tasks (delayed execution), sequence state updates</td>
+        </tr>
+        <tr>
+          <td><strong>campaign-schedule-worker</strong></td>
+          <td><code>leadgen-emails-campaign-schedule-events-sub</code></td>
+          <td>Bulk request completion callbacks (v2 bulk-email messages)</td>
+          <td>Schedule meta updates, resend-to-unopened scheduling via EMAILS_API</td>
+        </tr>
+        <tr>
+          <td><strong>campaign-integration-worker</strong></td>
+          <td><code>email-campaign-integration-events-sub</code></td>
+          <td>Sync workflow/campaign templates</td>
+          <td>Publishes → <code>leadgen-emails-action-precompute-events</code></td>
+        </tr>
+        <tr>
+          <td><strong>action-precompute-worker</strong></td>
+          <td><code>leadgen-emails-action-precompute-events-sub</code></td>
+          <td>Precompute email actions for workflows</td>
+          <td>DB writes (precomputed action cache)</td>
+        </tr>
+        <tr>
+          <td><strong>stats-export-worker</strong></td>
+          <td><code>leadgen-emails-stats-export-events-sub</code></td>
+          <td>Process async stats export jobs</td>
+          <td>File generation → GCS / response</td>
+        </tr>
+        <tr>
+          <td><strong>snapshot-worker</strong></td>
+          <td><code>emails-snapshot-queue-events-sub</code></td>
+          <td>Template snapshot asset pipeline</td>
+          <td>SNAPSHOTS_APPENGINE_API, Mongo + GCS writes</td>
+        </tr>
+        <tr>
+          <td><strong>product-stats-worker</strong></td>
+          <td><code>leadgen-emails-product-stats-events-sub</code></td>
+          <td>Product attribution tied to email campaigns</td>
+          <td>ClickHouse writes</td>
+        </tr>
+        <tr>
+          <td><strong>tracking-link-worker</strong></td>
+          <td><code>emails-tracking-link-queue-events-sub</code></td>
+          <td>Link click tracking event processing</td>
+          <td>ClickHouse writes, cache updates</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Worker Chain Diagram</h3>
+  <div class="flow-container">
+    <div class="flow-diagram">
+      <div class="flow-row">
+        <div class="flow-box fb-be">Schedule Service</div>
+        <div class="flow-arrow">→ publish →</div>
+        <div class="flow-box fb-pubsub">campaign-trigger-events</div>
+        <div class="flow-arrow">→ sub →</div>
+        <div class="flow-box fb-worker">trigger-event-worker</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box fb-db">ClickHouse + Contacts</div>
+      </div>
+      <div class="flow-row">
+        <div class="flow-box fb-ext">Bulk Actions (completion)</div>
+        <div class="flow-arrow">→ publish →</div>
+        <div class="flow-box fb-pubsub">campaign-schedule-events</div>
+        <div class="flow-arrow">→ sub →</div>
+        <div class="flow-box fb-worker">campaign-schedule-worker</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box fb-db">Schedule Mongo</div>
+      </div>
+      <div class="flow-row">
+        <div class="flow-box fb-worker">campaign-stats-worker</div>
+        <div class="flow-arrow">→ publish →</div>
+        <div class="flow-box fb-pubsub">sequences-trigger-action</div>
+        <div class="flow-arrow">→ sub →</div>
+        <div class="flow-box fb-worker">sequences-trigger-worker</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box fb-ext">Cloud Tasks</div>
+      </div>
+      <div class="flow-row">
+        <div class="flow-box fb-worker">integration-worker</div>
+        <div class="flow-arrow">→ publish →</div>
+        <div class="flow-box fb-pubsub">action-precompute</div>
+        <div class="flow-arrow">→ sub →</div>
+        <div class="flow-box fb-worker">precompute-worker</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box fb-db">Precomputed Actions</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════ 07 PUBSUB ════════════════ -->
+<section id="pubsub">
+  <h2><span class="icon">📡</span> 07 — PubSub Topic Map</h2>
+  <p class="section-desc">Complete map of GCP PubSub topics published and subscribed by the email ecosystem. Topic names are configured in <code>common/config/index.ts</code> and <code>apps/emails/src/util/constHelper.ts</code>.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Topic</th><th>Publisher(s)</th><th>Subscriber(s)</th><th>Message Types</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>leadgen-emails-campaign-trigger-events</code></td>
+          <td>trigger.service, workerHelper</td>
+          <td>trigger-event-worker</td>
+          <td><code>email-campaign-event</code>, <code>email-campaign-bulk-tag</code></td>
+        </tr>
+        <tr>
+          <td><code>leadgen-emails-reporting-stats-events</code></td>
+          <td>External (conversations reporting)</td>
+          <td>campaign-stats-worker</td>
+          <td>Stats aggregation messages</td>
+        </tr>
+        <tr>
+          <td><code>leadgen-emails-sequences-trigger-action-events</code></td>
+          <td>campaign-stats-worker</td>
+          <td>sequences-trigger-action-worker</td>
+          <td>Sequence step execution triggers</td>
+        </tr>
+        <tr>
+          <td><code>leadgen-emails-campaign-schedule-events</code></td>
+          <td>External (bulk actions CDC)</td>
+          <td>campaign-schedule-worker</td>
+          <td><code>BULK_REQUESTS_V2</code> with <code>bulk-email</code> / <code>bulk-email-v2</code></td>
+        </tr>
+        <tr>
+          <td><code>email-campaign-integration-events</code></td>
+          <td>External (workflow engine)</td>
+          <td>campaign-integration-worker</td>
+          <td>Workflow template sync</td>
+        </tr>
+        <tr>
+          <td><code>leadgen-emails-action-precompute-events</code></td>
+          <td>campaign-integration-worker</td>
+          <td>action-precompute-worker</td>
+          <td>Precompute requests</td>
+        </tr>
+        <tr>
+          <td><code>leadgen-emails-stats-export-events</code></td>
+          <td>stats-export.service</td>
+          <td>stats-export-worker</td>
+          <td>Export job payloads</td>
+        </tr>
+        <tr>
+          <td><code>emails-snapshot-queue-events</code></td>
+          <td>builder.service</td>
+          <td>snapshot-worker</td>
+          <td>Snapshot generation requests</td>
+        </tr>
+        <tr>
+          <td><code>leadgen-emails-product-stats-events</code></td>
+          <td>External</td>
+          <td>product-stats-worker</td>
+          <td>Product attribution events</td>
+        </tr>
+        <tr>
+          <td><code>emails-tracking-link-queue-events</code></td>
+          <td>tracking.service</td>
+          <td>tracking-link-worker</td>
+          <td>Click tracking events</td>
+        </tr>
+        <tr>
+          <td><code>conversations-email-unsubscribe-events</code></td>
+          <td>builder.service</td>
+          <td>External (conversations)</td>
+          <td>Unsubscribe webhook events</td>
+        </tr>
+        <tr>
+          <td><code>revex-snapshots-general-operation-events</code></td>
+          <td>helper.ts</td>
+          <td>External (revex)</td>
+          <td>Asset clone operations</td>
+        </tr>
+        <tr>
+          <td><code>automation-reporting-pendo-tracking-events</code></td>
+          <td>helper.ts</td>
+          <td>External (reporting)</td>
+          <td>Pendo product events</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ════════════════ 08 DATA ════════════════ -->
+<section id="data">
+  <h2><span class="icon">💾</span> 08 — Data Layer & Models</h2>
+  <p class="section-desc">MongoDB is the primary data store with two connection pools (standard + leadgen). ClickHouse handles analytics. Redis for caching. GCS for assets.</p>
+
+  <h3>MongoDB Collections</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Model Name</th><th>Connection</th><th>Schema File</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>Schedule</code></td><td>standard</td><td><code>schedule/schedule.schema.ts</code></td><td>Email campaign schedules (broadcast, AB, RSS)</td></tr>
+        <tr><td><code>EmailBuilder</code></td><td>standard</td><td><code>builder/models/email-builder.schema.ts</code></td><td>Email templates (HTML, MJML, metadata)</td></tr>
+        <tr><td><code>Sequences</code></td><td>leadgen</td><td><code>sequences/schema/sequence.schema.ts</code></td><td>Sequence definitions (drip campaigns)</td></tr>
+        <tr><td><code>SequenceAction</code></td><td>leadgen</td><td><code>sequences/schema/sequence-action.schema.ts</code></td><td>Individual sequence steps</td></tr>
+        <tr><td><code>SequenceExecution</code></td><td>leadgen</td><td><code>sequences/schema/sequence-execution.schema.ts</code></td><td>Execution records (per-contact)</td></tr>
+        <tr><td><code>SequenceContactThread</code></td><td>leadgen</td><td><code>sequences/schema/sequence-contact-thread.schema.ts</code></td><td>Thread tracking for sequence emails</td></tr>
+        <tr><td><code>EmailBuilderSettings</code></td><td>leadgen</td><td><code>builder/models/email-settings.schema.ts</code></td><td>Per-location email builder settings</td></tr>
+        <tr><td><code>EmailBuilderShareTemplate</code></td><td>leadgen</td><td><code>builder/models/share-template.schema.ts</code></td><td>Shared template links</td></tr>
+        <tr><td><code>EmailBuilderTrigger</code></td><td>leadgen</td><td><code>trigger/models/trigger.schema.ts</code></td><td>Email campaign triggers</td></tr>
+        <tr><td><code>EmailsCampaignIntegration</code></td><td>leadgen</td><td><code>campaigns/models/campaign-integration.schema.ts</code></td><td>Workflow ↔ campaign sync</td></tr>
+        <tr><td><code>EmailBuilderSavedElements</code></td><td>leadgen</td><td><code>builder-elements/saved-element.schema.ts</code></td><td>Reusable drag-and-drop blocks</td></tr>
+        <tr><td><code>EmailBuilderAttributions</code></td><td>leadgen</td><td><code>attribution/</code></td><td>Revenue attribution records</td></tr>
+        <tr><td><code>EmailStatsExport</code></td><td>leadgen</td><td><code>stats/models/stats-export.schema.ts</code></td><td>Export job status tracking</td></tr>
+        <tr><td><code>DefaultEmailTemplates</code></td><td>leadgen</td><td><code>default-emails/</code></td><td>System default templates</td></tr>
+        <tr><td><code>DefaultEmailTemplateSettings</code></td><td>leadgen</td><td><code>default-emails/</code></td><td>Default template configuration</td></tr>
+        <tr><td><code>EmailBuilderImporter</code></td><td>leadgen</td><td><code>webhook/importer.schema.ts</code></td><td>Template import jobs</td></tr>
+        <tr><td><code>EmailBuilderVerification</code></td><td>leadgen</td><td><code>otp-verification/</code></td><td>Sender email verification status</td></tr>
+        <tr><td><code>EmailBuilderFormSubmission</code></td><td>leadgen</td><td><code>formSubmission/</code></td><td>Form data captured in builder</td></tr>
+        <tr><td><code>ImportTemplateFeedback</code></td><td>leadgen</td><td><code>import-template/</code></td><td>User feedback on imported templates</td></tr>
+        <tr><td><code>EmailMigration</code></td><td>leadgen</td><td><code>email-migration/</code></td><td>Per-location migration tracking</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>ClickHouse Tables</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Area</th><th>Purpose</th><th>Written By</th></tr></thead>
+      <tbody>
+        <tr><td>Trigger Events</td><td>Campaign trigger event log (high volume)</td><td>trigger-event-worker</td></tr>
+        <tr><td>Campaign Stats</td><td>Aggregated campaign metrics</td><td>campaign-stats-worker</td></tr>
+        <tr><td>Product Stats</td><td>Product attribution for email campaigns</td><td>product-stats-worker</td></tr>
+        <tr><td>Tracking Link</td><td>Click-through events</td><td>tracking-link-worker</td></tr>
+        <tr><td>Reporting Rollups</td><td>CDC email event rollups</td><td>reporting-rollup-email-worker (apps/reporting)</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ════════════════ 09 FLOWS ════════════════ -->
+<section id="flows">
+  <h2><span class="icon">🔀</span> 09 — Key Business Flows (with Diagrams)</h2>
+  <p class="section-desc">Visual service-level data flow diagrams for every critical email operation. Each diagram shows exactly which services talk to which, what data moves, and where it ends up.</p>
+
+  <!-- ─── FLOW 1: BROADCAST CAMPAIGN ─── -->
+  <h3>Flow 1: Start & Send Broadcast Campaign (Bulk Email v2)</h3>
+  <div class="svg-diagram-wrap">
+    <div class="diagram-title">Broadcast Campaign — Full Service Data Flow</div>
+    <svg viewBox="0 0 1140 720" width="1140" height="720" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="ah1" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#6c8cff"/></marker>
+        <marker id="ah2" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#a78bfa"/></marker>
+        <marker id="ah3" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#4ade80"/></marker>
+        <marker id="ah4" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#22d3ee"/></marker>
+        <marker id="ah5" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#fb923c"/></marker>
+        <marker id="ah6" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#f472b6"/></marker>
+        <filter id="glow"><feGaussianBlur stdDeviation="2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      </defs>
+
+      <!-- Background lanes -->
+      <rect x="0" y="0" width="1140" height="100" rx="0" fill="rgba(108,140,255,.04)" stroke="none"/>
+      <rect x="0" y="100" width="1140" height="140" rx="0" fill="rgba(167,139,250,.04)" stroke="none"/>
+      <rect x="0" y="240" width="1140" height="100" rx="0" fill="rgba(251,146,60,.04)" stroke="none"/>
+      <rect x="0" y="340" width="1140" height="100" rx="0" fill="rgba(34,211,238,.04)" stroke="none"/>
+      <rect x="0" y="440" width="1140" height="120" rx="0" fill="rgba(74,222,128,.04)" stroke="none"/>
+      <rect x="0" y="560" width="1140" height="160" rx="0" fill="rgba(244,114,182,.04)" stroke="none"/>
+
+      <!-- Lane labels -->
+      <text x="12" y="22" font-size="10" fill="#6c8cff" font-weight="700" opacity=".7">BROWSER / FRONTEND</text>
+      <text x="12" y="118" font-size="10" fill="#a78bfa" font-weight="700" opacity=".7">EMAILS BACKEND (API)</text>
+      <text x="12" y="258" font-size="10" fill="#fb923c" font-weight="700" opacity=".7">EXTERNAL SERVICES (ISTIO)</text>
+      <text x="12" y="358" font-size="10" fill="#22d3ee" font-weight="700" opacity=".7">GCP PUBSUB</text>
+      <text x="12" y="458" font-size="10" fill="#4ade80" font-weight="700" opacity=".7">WORKERS</text>
+      <text x="12" y="578" font-size="10" fill="#f472b6" font-weight="700" opacity=".7">DATA STORES</text>
+
+      <!-- STEP 1: User in Browser -->
+      <rect x="40" y="38" width="160" height="48" rx="8" fill="#1a1d27" stroke="#6c8cff" stroke-width="1.5"/>
+      <text x="120" y="58" text-anchor="middle" font-size="11" fill="#6c8cff" font-weight="700">email-home</text>
+      <text x="120" y="74" text-anchor="middle" font-size="9" fill="#8b90a5">Create campaign + select</text>
+
+      <rect x="260" y="38" width="160" height="48" rx="8" fill="#1a1d27" stroke="#6c8cff" stroke-width="1.5"/>
+      <text x="340" y="58" text-anchor="middle" font-size="11" fill="#6c8cff" font-weight="700">email-builder</text>
+      <text x="340" y="74" text-anchor="middle" font-size="9" fill="#8b90a5">Design template (iframe)</text>
+
+      <!-- Arrow 1→2 -->
+      <line x1="200" y1="62" x2="258" y2="62" stroke="#6c8cff" stroke-width="1.5" marker-end="url(#ah1)"/>
+      <text x="229" y="55" text-anchor="middle" font-size="8" fill="#8b90a5">Postmate</text>
+
+      <!-- STEP 2: Click Send → Schedule Controller -->
+      <rect x="500" y="38" width="180" height="48" rx="8" fill="#1a1d27" stroke="#6c8cff" stroke-width="1.5"/>
+      <text x="590" y="58" text-anchor="middle" font-size="11" fill="#6c8cff" font-weight="700">User clicks "Send"</text>
+      <text x="590" y="74" text-anchor="middle" font-size="9" fill="#8b90a5">POST /emails/schedule/start</text>
+
+      <line x1="420" y1="62" x2="498" y2="62" stroke="#6c8cff" stroke-width="1.5" marker-end="url(#ah1)"/>
+
+      <!-- Arrow down to Backend -->
+      <line x1="590" y1="86" x2="590" y2="128" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="6,3" marker-end="url(#ah2)"/>
+      <text x="604" y="112" font-size="8" fill="#8b90a5">HTTP</text>
+
+      <!-- BACKEND: Schedule Service -->
+      <rect x="480" y="130" width="220" height="48" rx="8" fill="#1a1d27" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="590" y="150" text-anchor="middle" font-size="11" fill="#a78bfa" font-weight="700">ScheduleController</text>
+      <text x="590" y="166" text-anchor="middle" font-size="9" fill="#8b90a5">schedule.service → starts bulk v2</text>
+
+      <!-- BACKEND: Trigger Service (parallel) -->
+      <rect x="760" y="130" width="200" height="48" rx="8" fill="#1a1d27" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="860" y="150" text-anchor="middle" font-size="11" fill="#a78bfa" font-weight="700">TriggerService</text>
+      <text x="860" y="166" text-anchor="middle" font-size="9" fill="#8b90a5">chunks contacts → PubSub</text>
+
+      <line x1="700" y1="154" x2="758" y2="154" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#ah2)"/>
+      <text x="729" y="148" text-anchor="middle" font-size="8" fill="#8b90a5">parallel</text>
+
+      <!-- Arrow down to Bulk Actions -->
+      <line x1="590" y1="178" x2="590" y2="260" stroke="#fb923c" stroke-width="1.5" marker-end="url(#ah5)"/>
+      <text x="604" y="222" font-size="8" fill="#8b90a5">InternalRequest</text>
+
+      <!-- EXTERNAL: Bulk Actions -->
+      <rect x="470" y="262" width="240" height="52" rx="8" fill="#1a1d27" stroke="#fb923c" stroke-width="1.5"/>
+      <text x="590" y="282" text-anchor="middle" font-size="11" fill="#fb923c" font-weight="700">Bulk Actions API</text>
+      <text x="590" y="298" text-anchor="middle" font-size="9" fill="#8b90a5">POST /request → iterates contacts</text>
+
+      <!-- EXTERNAL: Conversations -->
+      <rect x="780" y="262" width="220" height="52" rx="8" fill="#1a1d27" stroke="#fb923c" stroke-width="1.5"/>
+      <text x="890" y="282" text-anchor="middle" font-size="11" fill="#fb923c" font-weight="700">Conversations API</text>
+      <text x="890" y="298" text-anchor="middle" font-size="9" fill="#8b90a5">POST /messages → sends email</text>
+
+      <line x1="710" y1="288" x2="778" y2="288" stroke="#fb923c" stroke-width="1.5" marker-end="url(#ah5)"/>
+      <text x="744" y="282" text-anchor="middle" font-size="8" fill="#8b90a5">per contact</text>
+
+      <!-- EXTERNAL: Contacts API -->
+      <rect x="120" y="262" width="200" height="52" rx="8" fill="#1a1d27" stroke="#fb923c" stroke-width="1.5"/>
+      <text x="220" y="282" text-anchor="middle" font-size="11" fill="#fb923c" font-weight="700">Contacts API</text>
+      <text x="220" y="298" text-anchor="middle" font-size="9" fill="#8b90a5">audience resolution + tagging</text>
+
+      <line x1="470" y1="295" x2="322" y2="295" stroke="#fb923c" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#ah5)"/>
+
+      <!-- PubSub: Trigger events -->
+      <rect x="770" y="358" width="250" height="44" rx="8" fill="#1a1d27" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="895" y="378" text-anchor="middle" font-size="10" fill="#22d3ee" font-weight="700">campaign-trigger-events</text>
+      <text x="895" y="392" text-anchor="middle" font-size="8" fill="#8b90a5">topic: leadgen-emails-campaign-trigger-events</text>
+
+      <line x1="860" y1="178" x2="860" y2="356" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="6,3" marker-end="url(#ah4)"/>
+      <text x="874" y="270" font-size="8" fill="#8b90a5">publish</text>
+
+      <!-- PubSub: Schedule events (bulk completion) -->
+      <rect x="420" y="358" width="280" height="44" rx="8" fill="#1a1d27" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="560" y="378" text-anchor="middle" font-size="10" fill="#22d3ee" font-weight="700">campaign-schedule-events</text>
+      <text x="560" y="392" text-anchor="middle" font-size="8" fill="#8b90a5">bulk completion CDC: BULK_REQUESTS_V2</text>
+
+      <line x1="560" y1="314" x2="560" y2="356" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="6,3" marker-end="url(#ah4)"/>
+      <text x="574" y="338" font-size="8" fill="#8b90a5">on complete</text>
+
+      <!-- PubSub: Reporting stats -->
+      <rect x="100" y="358" width="260" height="44" rx="8" fill="#1a1d27" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="230" y="378" text-anchor="middle" font-size="10" fill="#22d3ee" font-weight="700">reporting-stats-events</text>
+      <text x="230" y="392" text-anchor="middle" font-size="8" fill="#8b90a5">topic: leadgen-emails-reporting-stats-events</text>
+
+      <!-- Workers -->
+      <rect x="770" y="460" width="250" height="44" rx="8" fill="#1a1d27" stroke="#4ade80" stroke-width="1.5"/>
+      <text x="895" y="480" text-anchor="middle" font-size="11" fill="#4ade80" font-weight="700">trigger-event-worker</text>
+      <text x="895" y="494" text-anchor="middle" font-size="8" fill="#8b90a5">tags contacts, writes ClickHouse</text>
+
+      <line x1="895" y1="402" x2="895" y2="458" stroke="#4ade80" stroke-width="1.5" marker-end="url(#ah3)"/>
+      <text x="909" y="432" font-size="8" fill="#8b90a5">subscribe</text>
+
+      <rect x="420" y="460" width="280" height="44" rx="8" fill="#1a1d27" stroke="#4ade80" stroke-width="1.5"/>
+      <text x="560" y="480" text-anchor="middle" font-size="11" fill="#4ade80" font-weight="700">campaign-schedule-worker</text>
+      <text x="560" y="494" text-anchor="middle" font-size="8" fill="#8b90a5">updates Schedule, triggers resend</text>
+
+      <line x1="560" y1="402" x2="560" y2="458" stroke="#4ade80" stroke-width="1.5" marker-end="url(#ah3)"/>
+
+      <rect x="100" y="460" width="260" height="44" rx="8" fill="#1a1d27" stroke="#4ade80" stroke-width="1.5"/>
+      <text x="230" y="480" text-anchor="middle" font-size="11" fill="#4ade80" font-weight="700">campaign-stats-worker</text>
+      <text x="230" y="494" text-anchor="middle" font-size="8" fill="#8b90a5">aggregates open/click/bounce stats</text>
+
+      <line x1="230" y1="402" x2="230" y2="458" stroke="#4ade80" stroke-width="1.5" marker-end="url(#ah3)"/>
+
+      <!-- Data stores -->
+      <rect x="60" y="590" width="160" height="50" rx="10" fill="#1a1d27" stroke="#f472b6" stroke-width="1.5"/>
+      <text x="140" y="612" text-anchor="middle" font-size="11" fill="#f472b6" font-weight="700">MongoDB</text>
+      <text x="140" y="628" text-anchor="middle" font-size="9" fill="#8b90a5">Schedule, Stats docs</text>
+
+      <rect x="280" y="590" width="160" height="50" rx="10" fill="#1a1d27" stroke="#f472b6" stroke-width="1.5"/>
+      <text x="360" y="612" text-anchor="middle" font-size="11" fill="#f472b6" font-weight="700">ClickHouse</text>
+      <text x="360" y="628" text-anchor="middle" font-size="9" fill="#8b90a5">Trigger events, stats</text>
+
+      <rect x="500" y="590" width="160" height="50" rx="10" fill="#1a1d27" stroke="#f472b6" stroke-width="1.5"/>
+      <text x="580" y="612" text-anchor="middle" font-size="11" fill="#f472b6" font-weight="700">Redis</text>
+      <text x="580" y="628" text-anchor="middle" font-size="9" fill="#8b90a5">Tracking link cache</text>
+
+      <!-- Worker → Data arrows -->
+      <line x1="170" y1="504" x2="140" y2="588" stroke="#f472b6" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#ah6)"/>
+      <line x1="280" y1="504" x2="340" y2="588" stroke="#f472b6" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#ah6)"/>
+      <line x1="560" y1="504" x2="160" y2="588" stroke="#f472b6" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#ah6)"/>
+      <line x1="830" y1="504" x2="380" y2="588" stroke="#f472b6" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#ah6)"/>
+
+      <!-- Step numbers -->
+      <circle cx="40" cy="62" r="11" fill="#6c8cff"/><text x="40" y="66" text-anchor="middle" font-size="9" fill="#fff" font-weight="700">1</text>
+      <circle cx="260" cy="62" r="11" fill="#6c8cff"/><text x="260" y="66" text-anchor="middle" font-size="9" fill="#fff" font-weight="700">2</text>
+      <circle cx="500" cy="62" r="11" fill="#6c8cff"/><text x="500" y="66" text-anchor="middle" font-size="9" fill="#fff" font-weight="700">3</text>
+      <circle cx="480" cy="154" r="11" fill="#a78bfa"/><text x="480" y="158" text-anchor="middle" font-size="9" fill="#fff" font-weight="700">4</text>
+      <circle cx="470" cy="288" r="11" fill="#fb923c"/><text x="470" y="292" text-anchor="middle" font-size="9" fill="#fff" font-weight="700">5</text>
+      <circle cx="760" cy="154" r="11" fill="#a78bfa"/><text x="760" y="158" text-anchor="middle" font-size="9" fill="#fff" font-weight="700">6</text>
+      <circle cx="770" cy="482" r="11" fill="#4ade80"/><text x="770" y="486" text-anchor="middle" font-size="9" fill="#fff" font-weight="700">7</text>
+      <circle cx="420" cy="380" r="11" fill="#22d3ee"/><text x="420" y="384" text-anchor="middle" font-size="9" fill="#fff" font-weight="700">8</text>
+      <circle cx="420" cy="482" r="11" fill="#4ade80"/><text x="420" y="486" text-anchor="middle" font-size="9" fill="#fff" font-weight="700">9</text>
+      <circle cx="100" cy="482" r="11" fill="#4ade80"/><text x="100" y="486" text-anchor="middle" font-size="9" fill="#fff" font-weight="700">10</text>
+
+      <!-- Resend loop -->
+      <rect x="720" y="590" width="200" height="50" rx="10" fill="#1a1d27" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="6,3"/>
+      <text x="820" y="612" text-anchor="middle" font-size="10" fill="#a78bfa" font-weight="600">Resend to Unopened</text>
+      <text x="820" y="628" text-anchor="middle" font-size="9" fill="#8b90a5">optional → back to step 4</text>
+      <line x1="620" y1="504" x2="750" y2="588" stroke="#a78bfa" stroke-width="1" stroke-dasharray="6,3" marker-end="url(#ah2)"/>
+      <path d="M920,615 Q980,615 980,300 Q980,154 962,154" fill="none" stroke="#a78bfa" stroke-width="1" stroke-dasharray="6,3" marker-end="url(#ah2)"/>
+      <text x="990" y="400" font-size="8" fill="#a78bfa" transform="rotate(90,990,400)">resend loop</text>
+    </svg>
+  </div>
+  <details>
+    <summary>📋 Step-by-step breakdown</summary>
+    <div class="details-body">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th style="width:40px">#</th><th>Step</th><th>Component</th><th>Detail</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td>User designs email template</td><td><span style="color:var(--accent)">email-builder (iframe)</span></td><td>Drag-and-drop → saves via <code>POST /emails/builder</code></td></tr>
+            <tr><td>2</td><td>User creates campaign</td><td><span style="color:var(--accent)">email-home</span></td><td>Select template, audience segment, schedule time → <code>POST /emails/schedule</code></td></tr>
+            <tr><td>3</td><td>User clicks "Send Now"</td><td><span style="color:var(--accent)">email-home</span></td><td><code>POST /emails/schedule/start</code> triggers the flow</td></tr>
+            <tr><td>4</td><td>Schedule service → Bulk Actions</td><td><span style="color:var(--accent2)">schedule.service</span></td><td><code>InternalRequest.post → BULK_ACTIONS_API /request</code> with <code>source: email-builder</code>, v2 flag. Also saves Schedule doc in Mongo.</td></tr>
+            <tr><td>5</td><td>Bulk Actions dispatches per-contact</td><td><span style="color:var(--orange)">Bulk Actions Service</span></td><td>Resolves audience from Contacts API, iterates each contact, calls <strong>Conversations API POST /messages</strong> to actually send the email</td></tr>
+            <tr><td>6</td><td>Trigger service fires events</td><td><span style="color:var(--accent2)">trigger.service</span></td><td>Chunks contact IDs into batches → publishes to <code>leadgen-emails-campaign-trigger-events</code></td></tr>
+            <tr><td>7</td><td>Trigger worker processes events</td><td><span style="color:var(--green)">trigger-event-worker</span></td><td>Tags contacts via Contacts API, writes trigger event rows to ClickHouse</td></tr>
+            <tr><td>8</td><td>Bulk completion CDC fires</td><td><span style="color:var(--cyan)">PubSub</span></td><td>Bulk Actions publishes completion message to <code>leadgen-emails-campaign-schedule-events</code> with model <code>BULK_REQUESTS_V2</code></td></tr>
+            <tr><td>9</td><td>Schedule worker finalizes</td><td><span style="color:var(--green)">campaign-schedule-worker</span></td><td>Updates Schedule doc status, optionally triggers resend-to-unopened (loops back to step 4)</td></tr>
+            <tr><td>10</td><td>Stats worker aggregates</td><td><span style="color:var(--green)">campaign-stats-worker</span></td><td>Consumes <code>reporting-stats-events</code>, writes aggregated open/click/bounce to ClickHouse + Mongo</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </details>
+
+  <!-- ─── FLOW 2: SEQUENCE SENDING ─── -->
+  <h3>Flow 2: Sequence Drip Campaign</h3>
+  <div class="svg-diagram-wrap">
+    <div class="diagram-title">Sequence Email Sending — Service Interaction Diagram</div>
+    <svg viewBox="0 0 1100 560" width="1100" height="560" xmlns="http://www.w3.org/2000/svg">
+      <!-- Lane backgrounds -->
+      <rect x="0" y="0" width="1100" height="90" fill="rgba(108,140,255,.04)"/>
+      <rect x="0" y="90" width="1100" height="130" fill="rgba(167,139,250,.04)"/>
+      <rect x="0" y="220" width="1100" height="90" fill="rgba(251,146,60,.04)"/>
+      <rect x="0" y="310" width="1100" height="90" fill="rgba(34,211,238,.04)"/>
+      <rect x="0" y="400" width="1100" height="80" fill="rgba(74,222,128,.04)"/>
+      <rect x="0" y="480" width="1100" height="80" fill="rgba(244,114,182,.04)"/>
+
+      <text x="12" y="20" font-size="10" fill="#6c8cff" font-weight="700" opacity=".7">FRONTEND</text>
+      <text x="12" y="108" font-size="10" fill="#a78bfa" font-weight="700" opacity=".7">EMAILS BACKEND</text>
+      <text x="12" y="240" font-size="10" fill="#fb923c" font-weight="700" opacity=".7">EXTERNAL SERVICES</text>
+      <text x="12" y="328" font-size="10" fill="#22d3ee" font-weight="700" opacity=".7">PUBSUB</text>
+      <text x="12" y="418" font-size="10" fill="#4ade80" font-weight="700" opacity=".7">WORKERS</text>
+      <text x="12" y="498" font-size="10" fill="#f472b6" font-weight="700" opacity=".7">DATA STORES</text>
+
+      <!-- Step 1: Create sequence -->
+      <rect x="50" y="32" width="200" height="44" rx="8" fill="#1a1d27" stroke="#6c8cff" stroke-width="1.5"/>
+      <text x="150" y="50" text-anchor="middle" font-size="11" fill="#6c8cff" font-weight="700">email-home</text>
+      <text x="150" y="66" text-anchor="middle" font-size="9" fill="#8b90a5">Create sequence + add steps</text>
+      <circle cx="50" cy="54" r="11" fill="#6c8cff"/><text x="50" y="58" text-anchor="middle" font-size="9" fill="#fff" font-weight="700">1</text>
+
+      <!-- Step 2: Start -->
+      <rect x="310" y="32" width="200" height="44" rx="8" fill="#1a1d27" stroke="#6c8cff" stroke-width="1.5"/>
+      <text x="410" y="50" text-anchor="middle" font-size="11" fill="#6c8cff" font-weight="700">Click "Start Sequence"</text>
+      <text x="410" y="66" text-anchor="middle" font-size="9" fill="#8b90a5">POST /emails/sequences/:id/start</text>
+      <circle cx="310" cy="54" r="11" fill="#6c8cff"/><text x="310" y="58" text-anchor="middle" font-size="9" fill="#fff" font-weight="700">2</text>
+      <line x1="250" y1="54" x2="308" y2="54" stroke="#6c8cff" stroke-width="1.5" marker-end="url(#ah1)"/>
+
+      <!-- Arrow down -->
+      <line x1="410" y1="76" x2="410" y2="108" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="6,3" marker-end="url(#ah2)"/>
+
+      <!-- Step 3: Backend service -->
+      <rect x="310" y="110" width="200" height="44" rx="8" fill="#1a1d27" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="410" y="128" text-anchor="middle" font-size="11" fill="#a78bfa" font-weight="700">sequence.service</text>
+      <text x="410" y="144" text-anchor="middle" font-size="9" fill="#8b90a5">Schedules delayed execution</text>
+      <circle cx="310" cy="132" r="11" fill="#a78bfa"/><text x="310" y="136" text-anchor="middle" font-size="9" fill="#fff" font-weight="700">3</text>
+
+      <!-- Step 3 → Cloud Tasks -->
+      <line x1="510" y1="132" x2="620" y2="132" stroke="#fb923c" stroke-width="1.5" marker-end="url(#ah5)"/>
+      <text x="565" y="126" text-anchor="middle" font-size="8" fill="#8b90a5">createTask()</text>
+
+      <!-- Step 4: Cloud Tasks -->
+      <rect x="622" y="110" width="200" height="44" rx="8" fill="#1a1d27" stroke="#fb923c" stroke-width="1.5"/>
+      <text x="722" y="128" text-anchor="middle" font-size="11" fill="#fb923c" font-weight="700">Cloud Tasks</text>
+      <text x="722" y="144" text-anchor="middle" font-size="9" fill="#8b90a5">Fires after delay (hours/days)</text>
+      <circle cx="622" cy="132" r="11" fill="#fb923c"/><text x="622" y="136" text-anchor="middle" font-size="9" fill="#fff" font-weight="700">4</text>
+
+      <!-- Cloud Tasks → callback to sequence-action -->
+      <line x1="722" y1="154" x2="722" y2="174" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#ah2)"/>
+
+      <!-- Step 5: sequence-action.service -->
+      <rect x="570" y="176" width="300" height="44" rx="8" fill="#1a1d27" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="720" y="194" text-anchor="middle" font-size="11" fill="#a78bfa" font-weight="700">sequence-action.service</text>
+      <text x="720" y="210" text-anchor="middle" font-size="9" fill="#8b90a5">Builds email payload → sends via Conversations</text>
+      <circle cx="570" cy="198" r="11" fill="#a78bfa"/><text x="570" y="202" text-anchor="middle" font-size="9" fill="#fff" font-weight="700">5</text>
+
+      <!-- Step 5 → Conversations -->
+      <line x1="720" y1="220" x2="720" y2="250" stroke="#fb923c" stroke-width="1.5" marker-end="url(#ah5)"/>
+
+      <!-- Conversations API -->
+      <rect x="570" y="252" width="300" height="44" rx="8" fill="#1a1d27" stroke="#fb923c" stroke-width="1.5"/>
+      <text x="720" y="270" text-anchor="middle" font-size="11" fill="#fb923c" font-weight="700">CONVERSATIONS_MESSAGES_INTERNAL_API</text>
+      <text x="720" y="286" text-anchor="middle" font-size="9" fill="#8b90a5">POST /messages — actually sends the email</text>
+      <circle cx="570" cy="274" r="11" fill="#fb923c"/><text x="570" y="278" text-anchor="middle" font-size="9" fill="#fff" font-weight="700">6</text>
+
+      <!-- PubSub: reporting stats -->
+      <rect x="200" y="332" width="300" height="40" rx="8" fill="#1a1d27" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="350" y="350" text-anchor="middle" font-size="10" fill="#22d3ee" font-weight="700">reporting-stats-events</text>
+      <text x="350" y="362" text-anchor="middle" font-size="8" fill="#8b90a5">delivery / open / click / bounce events</text>
+
+      <line x1="620" y1="296" x2="500" y2="330" stroke="#22d3ee" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#ah4)"/>
+      <text x="550" y="308" font-size="8" fill="#8b90a5">events</text>
+
+      <!-- Worker: stats -->
+      <rect x="200" y="422" width="300" height="40" rx="8" fill="#1a1d27" stroke="#4ade80" stroke-width="1.5"/>
+      <text x="350" y="440" text-anchor="middle" font-size="11" fill="#4ade80" font-weight="700">campaign-stats-worker</text>
+      <text x="350" y="454" text-anchor="middle" font-size="8" fill="#8b90a5">enriches with thread info, writes stats</text>
+      <circle cx="200" cy="442" r="11" fill="#4ade80"/><text x="200" y="446" text-anchor="middle" font-size="9" fill="#fff" font-weight="700">7</text>
+
+      <line x1="350" y1="372" x2="350" y2="420" stroke="#4ade80" stroke-width="1.5" marker-end="url(#ah3)"/>
+
+      <!-- Data stores -->
+      <rect x="70" y="500" width="180" height="44" rx="10" fill="#1a1d27" stroke="#f472b6" stroke-width="1.5"/>
+      <text x="160" y="518" text-anchor="middle" font-size="11" fill="#f472b6" font-weight="700">MongoDB</text>
+      <text x="160" y="534" text-anchor="middle" font-size="8" fill="#8b90a5">SequenceContactThread, Execution</text>
+
+      <rect x="310" y="500" width="180" height="44" rx="10" fill="#1a1d27" stroke="#f472b6" stroke-width="1.5"/>
+      <text x="400" y="518" text-anchor="middle" font-size="11" fill="#f472b6" font-weight="700">ClickHouse</text>
+      <text x="400" y="534" text-anchor="middle" font-size="8" fill="#8b90a5">Sequence stats rollup</text>
+
+      <line x1="300" y1="462" x2="180" y2="498" stroke="#f472b6" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#ah6)"/>
+      <line x1="400" y1="462" x2="400" y2="498" stroke="#f472b6" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#ah6)"/>
+
+      <!-- Thread save from action service -->
+      <line x1="620" y1="220" x2="200" y2="498" stroke="#f472b6" stroke-width="1" stroke-dasharray="6,3" marker-end="url(#ah6)"/>
+      <text x="380" y="380" font-size="8" fill="#f472b6" transform="rotate(-30,380,380)">save threadId</text>
+
+      <!-- Conversations → reporting stats back to worker -->
+      <rect x="600" y="332" width="200" height="40" rx="8" fill="#1a1d27" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="700" y="350" text-anchor="middle" font-size="10" fill="#22d3ee" font-weight="700">Conversations Reporting</text>
+      <text x="700" y="362" text-anchor="middle" font-size="8" fill="#8b90a5">GET /emails (recipient details)</text>
+
+      <line x1="500" y1="442" x2="598" y2="362" stroke="#fb923c" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#ah5)"/>
+      <text x="560" y="394" font-size="8" fill="#8b90a5">enrich</text>
+    </svg>
+  </div>
+
+  <!-- ─── FLOW 3: AB TEST CAMPAIGN ─── -->
+  <h3>Flow 3: A/B Test Campaign</h3>
+  <div class="svg-diagram-wrap">
+    <div class="diagram-title">A/B Test Campaign — Split Test & Winner Selection</div>
+    <svg viewBox="0 0 1100 480" width="1100" height="480" xmlns="http://www.w3.org/2000/svg">
+      <!-- Lanes -->
+      <rect x="0" y="0" width="1100" height="80" fill="rgba(108,140,255,.04)"/>
+      <rect x="0" y="80" width="1100" height="160" fill="rgba(167,139,250,.04)"/>
+      <rect x="0" y="240" width="1100" height="80" fill="rgba(251,146,60,.04)"/>
+      <rect x="0" y="320" width="1100" height="80" fill="rgba(34,211,238,.04)"/>
+      <rect x="0" y="400" width="1100" height="80" fill="rgba(74,222,128,.04)"/>
+
+      <text x="12" y="18" font-size="10" fill="#6c8cff" font-weight="700" opacity=".7">FRONTEND</text>
+      <text x="12" y="98" font-size="10" fill="#a78bfa" font-weight="700" opacity=".7">EMAILS BACKEND</text>
+      <text x="12" y="258" font-size="10" fill="#fb923c" font-weight="700" opacity=".7">EXTERNAL SERVICES</text>
+      <text x="12" y="338" font-size="10" fill="#22d3ee" font-weight="700" opacity=".7">PUBSUB</text>
+      <text x="12" y="418" font-size="10" fill="#4ade80" font-weight="700" opacity=".7">WORKERS</text>
+
+      <!-- Step 1: Create AB -->
+      <rect x="40" y="22" width="200" height="44" rx="8" fill="#1a1d27" stroke="#6c8cff" stroke-width="1.5"/>
+      <text x="140" y="40" text-anchor="middle" font-size="11" fill="#6c8cff" font-weight="700">email-home</text>
+      <text x="140" y="56" text-anchor="middle" font-size="9" fill="#8b90a5">Create AB campaign (2 variations)</text>
+      <circle cx="40" cy="44" r="11" fill="#6c8cff"/><text x="40" y="48" text-anchor="middle" font-size="9" fill="#fff" font-weight="700">1</text>
+
+      <line x1="140" y1="66" x2="140" y2="94" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="6,3" marker-end="url(#ah2)"/>
+
+      <!-- Step 2: Schedule service splits audience -->
+      <rect x="40" y="96" width="260" height="44" rx="8" fill="#1a1d27" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="170" y="114" text-anchor="middle" font-size="11" fill="#a78bfa" font-weight="700">schedule.service (AB split)</text>
+      <text x="170" y="130" text-anchor="middle" font-size="9" fill="#8b90a5">Split audience → create-ab-variation</text>
+      <circle cx="40" cy="118" r="11" fill="#a78bfa"/><text x="40" y="122" text-anchor="middle" font-size="9" fill="#fff" font-weight="700">2</text>
+
+      <!-- Variation A -->
+      <rect x="370" y="96" width="160" height="44" rx="8" fill="#1a1d27" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="450" y="114" text-anchor="middle" font-size="11" fill="#a78bfa" font-weight="700">Variation A</text>
+      <text x="450" y="130" text-anchor="middle" font-size="9" fill="#8b90a5">% of audience</text>
+
+      <!-- Variation B -->
+      <rect x="370" y="156" width="160" height="44" rx="8" fill="#1a1d27" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="450" y="174" text-anchor="middle" font-size="11" fill="#a78bfa" font-weight="700">Variation B</text>
+      <text x="450" y="190" text-anchor="middle" font-size="9" fill="#8b90a5">% of audience</text>
+
+      <line x1="300" y1="110" x2="368" y2="110" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#ah2)"/>
+      <line x1="300" y1="126" x2="368" y2="170" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#ah2)"/>
+
+      <!-- Both → Bulk Actions -->
+      <line x1="530" y1="118" x2="600" y2="270" stroke="#fb923c" stroke-width="1.5" marker-end="url(#ah5)"/>
+      <line x1="530" y1="178" x2="600" y2="278" stroke="#fb923c" stroke-width="1.5" marker-end="url(#ah5)"/>
+
+      <rect x="600" y="256" width="220" height="44" rx="8" fill="#1a1d27" stroke="#fb923c" stroke-width="1.5"/>
+      <text x="710" y="274" text-anchor="middle" font-size="11" fill="#fb923c" font-weight="700">Bulk Actions API</text>
+      <text x="710" y="290" text-anchor="middle" font-size="9" fill="#8b90a5">Sends each variation independently</text>
+      <circle cx="600" cy="278" r="11" fill="#fb923c"/><text x="600" y="282" text-anchor="middle" font-size="9" fill="#fff" font-weight="700">3</text>
+
+      <!-- Stats collect -->
+      <rect x="600" y="336" width="220" height="40" rx="8" fill="#1a1d27" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="710" y="354" text-anchor="middle" font-size="10" fill="#22d3ee" font-weight="700">reporting-stats-events</text>
+      <text x="710" y="366" text-anchor="middle" font-size="8" fill="#8b90a5">per-variation open/click metrics</text>
+      <line x1="710" y1="300" x2="710" y2="334" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="6,3" marker-end="url(#ah4)"/>
+
+      <!-- Stats worker -->
+      <rect x="600" y="416" width="220" height="40" rx="8" fill="#1a1d27" stroke="#4ade80" stroke-width="1.5"/>
+      <text x="710" y="434" text-anchor="middle" font-size="11" fill="#4ade80" font-weight="700">campaign-stats-worker</text>
+      <text x="710" y="448" text-anchor="middle" font-size="8" fill="#8b90a5">aggregates per-variation stats</text>
+      <line x1="710" y1="376" x2="710" y2="414" stroke="#4ade80" stroke-width="1.5" marker-end="url(#ah3)"/>
+      <circle cx="600" cy="436" r="11" fill="#4ade80"/><text x="600" y="440" text-anchor="middle" font-size="9" fill="#fff" font-weight="700">4</text>
+
+      <!-- Winner selection -->
+      <rect x="870" y="156" width="200" height="68" rx="8" fill="#1a1d27" stroke="#facc15" stroke-width="2"/>
+      <text x="970" y="176" text-anchor="middle" font-size="11" fill="#facc15" font-weight="700">Winner Selection</text>
+      <text x="970" y="192" text-anchor="middle" font-size="9" fill="#8b90a5">ab-winning-variation API</text>
+      <text x="970" y="208" text-anchor="middle" font-size="9" fill="#8b90a5">→ send winner to remaining %</text>
+      <circle cx="870" cy="190" r="11" fill="#facc15"/><text x="870" y="194" text-anchor="middle" font-size="9" fill="#1a1d27" font-weight="700">5</text>
+
+      <line x1="820" y1="436" x2="920" y2="224" stroke="#facc15" stroke-width="1.5" stroke-dasharray="6,3" marker-end="url(#ah5)"/>
+      <text x="886" y="340" font-size="8" fill="#facc15" transform="rotate(-55,886,340)">compare & pick winner</text>
+
+      <!-- Winner → back to Bulk Actions -->
+      <path d="M970,224 Q970,278 822,278" fill="none" stroke="#fb923c" stroke-width="1.5" marker-end="url(#ah5)"/>
+      <text x="910" y="258" font-size="8" fill="#8b90a5">send to rest</text>
+    </svg>
+  </div>
+
+  <!-- ─── FLOW 4: TEMPLATE SAVE + SNAPSHOT ─── -->
+  <h3>Flow 4: Template Save & Snapshot Pipeline</h3>
+  <div class="svg-diagram-wrap">
+    <div class="diagram-title">Template Save → Snapshot Asset Pipeline</div>
+    <svg viewBox="0 0 1000 320" width="1000" height="320" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0" y="0" width="1000" height="70" fill="rgba(108,140,255,.04)"/>
+      <rect x="0" y="70" width="1000" height="80" fill="rgba(167,139,250,.04)"/>
+      <rect x="0" y="150" width="1000" height="60" fill="rgba(34,211,238,.04)"/>
+      <rect x="0" y="210" width="1000" height="60" fill="rgba(74,222,128,.04)"/>
+      <rect x="0" y="270" width="1000" height="50" fill="rgba(244,114,182,.04)"/>
+
+      <text x="10" y="18" font-size="9" fill="#6c8cff" font-weight="700" opacity=".7">FRONTEND</text>
+      <text x="10" y="88" font-size="9" fill="#a78bfa" font-weight="700" opacity=".7">BACKEND</text>
+      <text x="10" y="168" font-size="9" fill="#22d3ee" font-weight="700" opacity=".7">PUBSUB</text>
+      <text x="10" y="228" font-size="9" fill="#4ade80" font-weight="700" opacity=".7">WORKER</text>
+      <text x="10" y="288" font-size="9" fill="#f472b6" font-weight="700" opacity=".7">STORAGE</text>
+
+      <!-- FE: Edit -->
+      <rect x="60" y="20" width="180" height="38" rx="7" fill="#1a1d27" stroke="#6c8cff" stroke-width="1.5"/>
+      <text x="150" y="38" text-anchor="middle" font-size="10" fill="#6c8cff" font-weight="700">email-builder</text>
+      <text x="150" y="50" text-anchor="middle" font-size="8" fill="#8b90a5">Edit elements → Ctrl+S</text>
+      <circle cx="60" cy="39" r="10" fill="#6c8cff"/><text x="60" y="43" text-anchor="middle" font-size="9" fill="#fff" font-weight="700">1</text>
+
+      <!-- FE: Save -->
+      <rect x="300" y="20" width="200" height="38" rx="7" fill="#1a1d27" stroke="#6c8cff" stroke-width="1.5"/>
+      <text x="400" y="38" text-anchor="middle" font-size="10" fill="#6c8cff" font-weight="700">PATCH /emails/builder/:id</text>
+      <text x="400" y="50" text-anchor="middle" font-size="8" fill="#8b90a5">sends full template JSON</text>
+      <circle cx="300" cy="39" r="10" fill="#6c8cff"/><text x="300" y="43" text-anchor="middle" font-size="9" fill="#fff" font-weight="700">2</text>
+      <line x1="240" y1="39" x2="298" y2="39" stroke="#6c8cff" stroke-width="1.5" marker-end="url(#ah1)"/>
+
+      <!-- Arrow down -->
+      <line x1="400" y1="58" x2="400" y2="82" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#ah2)"/>
+
+      <!-- BE: builder.service -->
+      <rect x="280" y="84" width="240" height="38" rx="7" fill="#1a1d27" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="400" y="100" text-anchor="middle" font-size="10" fill="#a78bfa" font-weight="700">builder.service</text>
+      <text x="400" y="112" text-anchor="middle" font-size="8" fill="#8b90a5">Update Mongo doc + publish snapshot</text>
+      <circle cx="280" cy="103" r="10" fill="#a78bfa"/><text x="280" y="107" text-anchor="middle" font-size="9" fill="#fff" font-weight="700">3</text>
+
+      <!-- Mongo write -->
+      <line x1="340" y1="122" x2="200" y2="282" stroke="#f472b6" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#ah6)"/>
+
+      <!-- PubSub -->
+      <line x1="450" y1="122" x2="500" y2="162" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#ah4)"/>
+      <rect x="420" y="160" width="280" height="36" rx="7" fill="#1a1d27" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="560" y="178" text-anchor="middle" font-size="10" fill="#22d3ee" font-weight="700">emails-snapshot-queue-events</text>
+      <text x="560" y="190" text-anchor="middle" font-size="8" fill="#8b90a5">publish: {templateId, locationId}</text>
+      <circle cx="420" cy="178" r="10" fill="#22d3ee"/><text x="420" y="182" text-anchor="middle" font-size="9" fill="#fff" font-weight="700">4</text>
+
+      <!-- Worker -->
+      <line x1="560" y1="196" x2="560" y2="222" stroke="#4ade80" stroke-width="1.5" marker-end="url(#ah3)"/>
+      <rect x="400" y="222" width="320" height="38" rx="7" fill="#1a1d27" stroke="#4ade80" stroke-width="1.5"/>
+      <text x="560" y="238" text-anchor="middle" font-size="10" fill="#4ade80" font-weight="700">snapshot-worker</text>
+      <text x="560" y="252" text-anchor="middle" font-size="8" fill="#8b90a5">Calls SNAPSHOTS_APPENGINE_API → render HTML to image</text>
+      <circle cx="400" cy="241" r="10" fill="#4ade80"/><text x="400" y="245" text-anchor="middle" font-size="9" fill="#fff" font-weight="700">5</text>
+
+      <!-- Data stores -->
+      <rect x="100" y="278" width="150" height="34" rx="8" fill="#1a1d27" stroke="#f472b6" stroke-width="1.5"/>
+      <text x="175" y="296" text-anchor="middle" font-size="10" fill="#f472b6" font-weight="700">MongoDB</text>
+      <text x="175" y="308" text-anchor="middle" font-size="8" fill="#8b90a5">EmailBuilder doc</text>
+
+      <rect x="320" y="278" width="150" height="34" rx="8" fill="#1a1d27" stroke="#f472b6" stroke-width="1.5"/>
+      <text x="395" y="296" text-anchor="middle" font-size="10" fill="#f472b6" font-weight="700">GCS Bucket</text>
+      <text x="395" y="308" text-anchor="middle" font-size="8" fill="#8b90a5">Snapshot image</text>
+
+      <rect x="540" y="278" width="190" height="34" rx="8" fill="#1a1d27" stroke="#fb923c" stroke-width="1.5"/>
+      <text x="635" y="296" text-anchor="middle" font-size="10" fill="#fb923c" font-weight="700">SNAPSHOTS_APPENGINE</text>
+      <text x="635" y="308" text-anchor="middle" font-size="8" fill="#8b90a5">HTML → PNG renderer</text>
+
+      <line x1="500" y1="260" x2="395" y2="276" stroke="#f472b6" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#ah6)"/>
+      <line x1="620" y1="260" x2="620" y2="276" stroke="#fb923c" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#ah5)"/>
+      <line x1="460" y1="260" x2="200" y2="276" stroke="#f472b6" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#ah6)"/>
+    </svg>
+  </div>
+
+  <!-- ─── FLOW 5: UNSUBSCRIBE ─── -->
+  <h3>Flow 5: Unsubscribe & Resubscribe</h3>
+  <div class="svg-diagram-wrap">
+    <div class="diagram-title">Email Unsubscribe — Cross-Service Flow</div>
+    <svg viewBox="0 0 900 280" width="900" height="280" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0" y="0" width="900" height="70" fill="rgba(251,146,60,.04)"/>
+      <rect x="0" y="70" width="900" height="70" fill="rgba(167,139,250,.04)"/>
+      <rect x="0" y="140" width="900" height="70" fill="rgba(251,146,60,.04)"/>
+      <rect x="0" y="210" width="900" height="70" fill="rgba(34,211,238,.04)"/>
+
+      <text x="10" y="18" font-size="9" fill="#fb923c" font-weight="700" opacity=".7">RECIPIENT</text>
+      <text x="10" y="88" font-size="9" fill="#a78bfa" font-weight="700" opacity=".7">EMAILS BACKEND</text>
+      <text x="10" y="158" font-size="9" fill="#fb923c" font-weight="700" opacity=".7">CONVERSATIONS API</text>
+      <text x="10" y="228" font-size="9" fill="#22d3ee" font-weight="700" opacity=".7">EVENT BUS</text>
+
+      <!-- Recipient clicks -->
+      <rect x="80" y="18" width="220" height="38" rx="7" fill="#1a1d27" stroke="#fb923c" stroke-width="1.5"/>
+      <text x="190" y="34" text-anchor="middle" font-size="10" fill="#fb923c" font-weight="700">Recipient Email Client</text>
+      <text x="190" y="48" text-anchor="middle" font-size="8" fill="#8b90a5">Clicks "Unsubscribe" link</text>
+      <circle cx="80" cy="37" r="10" fill="#fb923c"/><text x="80" y="41" text-anchor="middle" font-size="9" fill="#fff" font-weight="700">1</text>
+
+      <line x1="190" y1="56" x2="190" y2="82" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#ah2)"/>
+      <text x="204" y="72" font-size="8" fill="#8b90a5">GET /emails/builder/unsubscribe</text>
+
+      <!-- Builder service -->
+      <rect x="80" y="84" width="260" height="38" rx="7" fill="#1a1d27" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="210" y="100" text-anchor="middle" font-size="10" fill="#a78bfa" font-weight="700">builder.service (unsubscribe handler)</text>
+      <text x="210" y="112" text-anchor="middle" font-size="8" fill="#8b90a5">Validates token → calls Conversations</text>
+      <circle cx="80" cy="103" r="10" fill="#a78bfa"/><text x="80" y="107" text-anchor="middle" font-size="9" fill="#fff" font-weight="700">2</text>
+
+      <line x1="340" y1="103" x2="410" y2="103" stroke="#fb923c" stroke-width="1.5" marker-end="url(#ah5)"/>
+
+      <!-- Conversations -->
+      <rect x="412" y="84" width="320" height="38" rx="7" fill="#1a1d27" stroke="#fb923c" stroke-width="1.5"/>
+      <text x="572" y="100" text-anchor="middle" font-size="10" fill="#fb923c" font-weight="700">CONVERSATIONS_API</text>
+      <text x="572" y="112" text-anchor="middle" font-size="8" fill="#8b90a5">POST /messages/email/unsubscribe → updates contact</text>
+      <circle cx="412" cy="103" r="10" fill="#fb923c"/><text x="412" y="107" text-anchor="middle" font-size="9" fill="#fff" font-weight="700">3</text>
+
+      <!-- Also publishes -->
+      <line x1="250" y1="122" x2="250" y2="222" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="6,3" marker-end="url(#ah4)"/>
+
+      <rect x="120" y="224" width="340" height="36" rx="7" fill="#1a1d27" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="290" y="240" text-anchor="middle" font-size="10" fill="#22d3ee" font-weight="700">conversations-email-unsubscribe-events</text>
+      <text x="290" y="254" text-anchor="middle" font-size="8" fill="#8b90a5">PubSub: webhook delivery to external systems</text>
+      <circle cx="120" cy="242" r="10" fill="#22d3ee"/><text x="120" y="246" text-anchor="middle" font-size="9" fill="#fff" font-weight="700">4</text>
+
+      <!-- Resubscribe path -->
+      <rect x="570" y="158" width="260" height="38" rx="7" fill="#1a1d27" stroke="#4ade80" stroke-width="1.5" stroke-dasharray="6,3"/>
+      <text x="700" y="174" text-anchor="middle" font-size="10" fill="#4ade80" font-weight="700">Resubscribe (optional)</text>
+      <text x="700" y="188" text-anchor="middle" font-size="8" fill="#8b90a5">POST /emails/builder/resubscribe → same path</text>
+      <line x1="660" y1="122" x2="660" y2="156" stroke="#4ade80" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#ah3)"/>
+
+      <!-- Confirmation page -->
+      <rect x="430" y="18" width="200" height="38" rx="7" fill="#1a1d27" stroke="#4ade80" stroke-width="1.5"/>
+      <text x="530" y="34" text-anchor="middle" font-size="10" fill="#4ade80" font-weight="700">Confirmation Page</text>
+      <text x="530" y="48" text-anchor="middle" font-size="8" fill="#8b90a5">Handlebars rendered HTML</text>
+
+      <line x1="300" y1="37" x2="428" y2="37" stroke="#a78bfa" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#ah2)"/>
+      <text x="364" y="32" font-size="8" fill="#8b90a5">response</text>
+    </svg>
+  </div>
+
+  <!-- ─── FLOW 6: WORKFLOW INTEGRATION ─── -->
+  <h3>Flow 6: Workflow / Automation Integration</h3>
+  <div class="svg-diagram-wrap">
+    <div class="diagram-title">Workflow Engine → Email Campaign Integration Pipeline</div>
+    <svg viewBox="0 0 1060 350" width="1060" height="350" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0" y="0" width="1060" height="80" fill="rgba(251,146,60,.04)"/>
+      <rect x="0" y="80" width="1060" height="70" fill="rgba(34,211,238,.04)"/>
+      <rect x="0" y="150" width="1060" height="70" fill="rgba(74,222,128,.04)"/>
+      <rect x="0" y="220" width="1060" height="60" fill="rgba(34,211,238,.04)"/>
+      <rect x="0" y="280" width="1060" height="70" fill="rgba(74,222,128,.04)"/>
+
+      <text x="10" y="18" font-size="9" fill="#fb923c" font-weight="700" opacity=".7">WORKFLOW ENGINE (EXTERNAL)</text>
+      <text x="10" y="98" font-size="9" fill="#22d3ee" font-weight="700" opacity=".7">PUBSUB — STAGE 1</text>
+      <text x="10" y="168" font-size="9" fill="#4ade80" font-weight="700" opacity=".7">WORKER — STAGE 1</text>
+      <text x="10" y="238" font-size="9" fill="#22d3ee" font-weight="700" opacity=".7">PUBSUB — STAGE 2</text>
+      <text x="10" y="298" font-size="9" fill="#4ade80" font-weight="700" opacity=".7">WORKER — STAGE 2</text>
+
+      <!-- Workflow engine publishes -->
+      <rect x="80" y="20" width="300" height="44" rx="7" fill="#1a1d27" stroke="#fb923c" stroke-width="1.5"/>
+      <text x="230" y="38" text-anchor="middle" font-size="11" fill="#fb923c" font-weight="700">Automation Workflows Engine</text>
+      <text x="230" y="54" text-anchor="middle" font-size="9" fill="#8b90a5">Email action in workflow triggers event</text>
+      <circle cx="80" cy="42" r="10" fill="#fb923c"/><text x="80" y="46" text-anchor="middle" font-size="9" fill="#fff" font-weight="700">1</text>
+
+      <line x1="230" y1="64" x2="230" y2="92" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#ah4)"/>
+
+      <!-- PubSub Stage 1 -->
+      <rect x="80" y="92" width="340" height="36" rx="7" fill="#1a1d27" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="250" y="108" text-anchor="middle" font-size="10" fill="#22d3ee" font-weight="700">email-campaign-integration-events</text>
+      <text x="250" y="120" text-anchor="middle" font-size="8" fill="#8b90a5">template sync + campaign mapping</text>
+      <circle cx="80" cy="110" r="10" fill="#22d3ee"/><text x="80" y="114" text-anchor="middle" font-size="9" fill="#fff" font-weight="700">2</text>
+
+      <line x1="250" y1="128" x2="250" y2="162" stroke="#4ade80" stroke-width="1.5" marker-end="url(#ah3)"/>
+
+      <!-- Worker Stage 1 -->
+      <rect x="80" y="162" width="340" height="42" rx="7" fill="#1a1d27" stroke="#4ade80" stroke-width="1.5"/>
+      <text x="250" y="180" text-anchor="middle" font-size="10" fill="#4ade80" font-weight="700">campaign-integration-worker</text>
+      <text x="250" y="194" text-anchor="middle" font-size="8" fill="#8b90a5">Syncs workflow templates → EmailsCampaignIntegration</text>
+      <circle cx="80" cy="183" r="10" fill="#4ade80"/><text x="80" y="187" text-anchor="middle" font-size="9" fill="#fff" font-weight="700">3</text>
+
+      <!-- Arrow to Stage 2 PubSub -->
+      <line x1="420" y1="183" x2="510" y2="183" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#ah4)"/>
+      <text x="465" y="177" font-size="8" fill="#8b90a5">publish</text>
+
+      <line x1="610" y1="183" x2="610" y2="232" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#ah4)"/>
+
+      <!-- PubSub Stage 2 -->
+      <rect x="480" y="232" width="360" height="36" rx="7" fill="#1a1d27" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="660" y="248" text-anchor="middle" font-size="10" fill="#22d3ee" font-weight="700">leadgen-emails-action-precompute-events</text>
+      <text x="660" y="260" text-anchor="middle" font-size="8" fill="#8b90a5">precompute email action payloads</text>
+      <circle cx="480" cy="250" r="10" fill="#22d3ee"/><text x="480" y="254" text-anchor="middle" font-size="9" fill="#fff" font-weight="700">4</text>
+
+      <line x1="660" y1="268" x2="660" y2="292" stroke="#4ade80" stroke-width="1.5" marker-end="url(#ah3)"/>
+
+      <!-- Worker Stage 2 -->
+      <rect x="480" y="292" width="360" height="42" rx="7" fill="#1a1d27" stroke="#4ade80" stroke-width="1.5"/>
+      <text x="660" y="310" text-anchor="middle" font-size="10" fill="#4ade80" font-weight="700">action-precompute-worker</text>
+      <text x="660" y="324" text-anchor="middle" font-size="8" fill="#8b90a5">Precomputes rendered HTML + merge tags → caches for fast send</text>
+      <circle cx="480" cy="313" r="10" fill="#4ade80"/><text x="480" y="317" text-anchor="middle" font-size="9" fill="#fff" font-weight="700">5</text>
+
+      <!-- Dashed: two-stage pipeline label -->
+      <rect x="510" y="155" width="190" height="30" rx="6" fill="rgba(108,140,255,.1)" stroke="var(--accent)" stroke-width="1" stroke-dasharray="4,3"/>
+      <text x="605" y="174" text-anchor="middle" font-size="10" fill="#6c8cff" font-weight="700">Two-Stage Pipeline</text>
+    </svg>
+  </div>
+
+  <!-- ─── FLOW 7: STATS EXPORT ─── -->
+  <h3>Flow 7: Stats Export (Async)</h3>
+  <div class="svg-diagram-wrap">
+    <div class="diagram-title">Campaign Stats Export — Async Job Pipeline</div>
+    <svg viewBox="0 0 940 260" width="940" height="260" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0" y="0" width="940" height="65" fill="rgba(108,140,255,.04)"/>
+      <rect x="0" y="65" width="940" height="65" fill="rgba(167,139,250,.04)"/>
+      <rect x="0" y="130" width="940" height="60" fill="rgba(34,211,238,.04)"/>
+      <rect x="0" y="190" width="940" height="70" fill="rgba(74,222,128,.04)"/>
+
+      <text x="10" y="16" font-size="9" fill="#6c8cff" font-weight="700" opacity=".7">FRONTEND</text>
+      <text x="10" y="80" font-size="9" fill="#a78bfa" font-weight="700" opacity=".7">BACKEND</text>
+      <text x="10" y="148" font-size="9" fill="#22d3ee" font-weight="700" opacity=".7">PUBSUB</text>
+      <text x="10" y="208" font-size="9" fill="#4ade80" font-weight="700" opacity=".7">WORKER</text>
+
+      <!-- FE request -->
+      <rect x="60" y="16" width="200" height="36" rx="7" fill="#1a1d27" stroke="#6c8cff" stroke-width="1.5"/>
+      <text x="160" y="32" text-anchor="middle" font-size="10" fill="#6c8cff" font-weight="700">email-home (Stats page)</text>
+      <text x="160" y="44" text-anchor="middle" font-size="8" fill="#8b90a5">POST /emails/stats/export</text>
+      <circle cx="60" cy="34" r="9" fill="#6c8cff"/><text x="60" y="38" text-anchor="middle" font-size="8" fill="#fff" font-weight="700">1</text>
+
+      <line x1="160" y1="52" x2="160" y2="76" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#ah2)"/>
+
+      <!-- BE service -->
+      <rect x="60" y="78" width="240" height="36" rx="7" fill="#1a1d27" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="180" y="94" text-anchor="middle" font-size="10" fill="#a78bfa" font-weight="700">stats-export.service</text>
+      <text x="180" y="106" text-anchor="middle" font-size="8" fill="#8b90a5">Creates export job → publishes to PubSub</text>
+      <circle cx="60" cy="96" r="9" fill="#a78bfa"/><text x="60" y="100" text-anchor="middle" font-size="8" fill="#fff" font-weight="700">2</text>
+
+      <line x1="300" y1="96" x2="370" y2="96" stroke="#a78bfa" stroke-width="1" stroke-dasharray="4,3"/>
+      <line x1="370" y1="96" x2="370" y2="142" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#ah4)"/>
+
+      <!-- PubSub -->
+      <rect x="310" y="142" width="300" height="32" rx="7" fill="#1a1d27" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="460" y="158" text-anchor="middle" font-size="10" fill="#22d3ee" font-weight="700">leadgen-emails-stats-export-events</text>
+      <text x="460" y="168" text-anchor="middle" font-size="8" fill="#8b90a5">{exportId, locationId, filters}</text>
+      <circle cx="310" cy="158" r="9" fill="#22d3ee"/><text x="310" y="162" text-anchor="middle" font-size="8" fill="#fff" font-weight="700">3</text>
+
+      <line x1="460" y1="174" x2="460" y2="202" stroke="#4ade80" stroke-width="1.5" marker-end="url(#ah3)"/>
+
+      <!-- Worker -->
+      <rect x="310" y="204" width="300" height="38" rx="7" fill="#1a1d27" stroke="#4ade80" stroke-width="1.5"/>
+      <text x="460" y="220" text-anchor="middle" font-size="10" fill="#4ade80" font-weight="700">stats-export-worker</text>
+      <text x="460" y="234" text-anchor="middle" font-size="8" fill="#8b90a5">Queries ClickHouse + Mongo → generates CSV → GCS</text>
+      <circle cx="310" cy="223" r="9" fill="#4ade80"/><text x="310" y="227" text-anchor="middle" font-size="8" fill="#fff" font-weight="700">4</text>
+
+      <!-- Stores -->
+      <rect x="680" y="204" width="120" height="38" rx="8" fill="#1a1d27" stroke="#f472b6" stroke-width="1.5"/>
+      <text x="740" y="220" text-anchor="middle" font-size="10" fill="#f472b6" font-weight="700">GCS</text>
+      <text x="740" y="234" text-anchor="middle" font-size="8" fill="#8b90a5">Export CSV file</text>
+      <line x1="610" y1="223" x2="678" y2="223" stroke="#f472b6" stroke-width="1.5" marker-end="url(#ah6)"/>
+
+      <!-- Polling -->
+      <rect x="380" y="16" width="220" height="36" rx="7" fill="#1a1d27" stroke="#6c8cff" stroke-width="1.5" stroke-dasharray="6,3"/>
+      <text x="490" y="32" text-anchor="middle" font-size="10" fill="#6c8cff" font-weight="600">Poll: GET /emails/stats/export</text>
+      <text x="490" y="44" text-anchor="middle" font-size="8" fill="#8b90a5">until status: complete → download</text>
+      <circle cx="380" cy="34" r="9" fill="#6c8cff"/><text x="380" y="38" text-anchor="middle" font-size="8" fill="#fff" font-weight="700">5</text>
+      <line x1="260" y1="34" x2="378" y2="34" stroke="#6c8cff" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#ah1)"/>
+
+      <!-- Update status in Mongo -->
+      <rect x="680" y="78" width="160" height="36" rx="7" fill="#1a1d27" stroke="#f472b6" stroke-width="1.5"/>
+      <text x="760" y="94" text-anchor="middle" font-size="10" fill="#f472b6" font-weight="700">MongoDB</text>
+      <text x="760" y="106" text-anchor="middle" font-size="8" fill="#8b90a5">EmailStatsExport status</text>
+      <line x1="610" y1="214" x2="720" y2="116" stroke="#f472b6" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#ah6)"/>
+      <text x="680" y="160" font-size="8" fill="#f472b6">update status</text>
+    </svg>
+  </div>
+
+  <!-- ─── FLOW 8: TRACKING LINK LIFECYCLE ─── -->
+  <h3>Flow 8: Tracking Link Lifecycle</h3>
+  <div class="svg-diagram-wrap">
+    <div class="diagram-title">Email Link Click → Tracking Event Pipeline</div>
+    <svg viewBox="0 0 940 310" width="940" height="310" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0" y="0" width="940" height="60" fill="rgba(251,146,60,.04)"/>
+      <rect x="0" y="60" width="940" height="65" fill="rgba(167,139,250,.04)"/>
+      <rect x="0" y="125" width="940" height="55" fill="rgba(34,211,238,.04)"/>
+      <rect x="0" y="180" width="940" height="60" fill="rgba(74,222,128,.04)"/>
+      <rect x="0" y="240" width="940" height="70" fill="rgba(244,114,182,.04)"/>
+
+      <text x="10" y="16" font-size="9" fill="#fb923c" font-weight="700" opacity=".7">RECIPIENT</text>
+      <text x="10" y="76" font-size="9" fill="#a78bfa" font-weight="700" opacity=".7">TRACKING SERVICE</text>
+      <text x="10" y="142" font-size="9" fill="#22d3ee" font-weight="700" opacity=".7">PUBSUB</text>
+      <text x="10" y="198" font-size="9" fill="#4ade80" font-weight="700" opacity=".7">WORKER</text>
+      <text x="10" y="258" font-size="9" fill="#f472b6" font-weight="700" opacity=".7">DATA STORES</text>
+
+      <!-- Click -->
+      <rect x="60" y="14" width="200" height="34" rx="7" fill="#1a1d27" stroke="#fb923c" stroke-width="1.5"/>
+      <text x="160" y="30" text-anchor="middle" font-size="10" fill="#fb923c" font-weight="700">Recipient clicks link</text>
+      <text x="160" y="42" text-anchor="middle" font-size="8" fill="#8b90a5">tracking redirect URL in email</text>
+      <circle cx="60" cy="31" r="9" fill="#fb923c"/><text x="60" y="35" text-anchor="middle" font-size="8" fill="#fff" font-weight="700">1</text>
+
+      <line x1="160" y1="48" x2="160" y2="72" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#ah2)"/>
+
+      <!-- Tracking service -->
+      <rect x="60" y="74" width="260" height="36" rx="7" fill="#1a1d27" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="190" y="90" text-anchor="middle" font-size="10" fill="#a78bfa" font-weight="700">tracking.service (redirect)</text>
+      <text x="190" y="102" text-anchor="middle" font-size="8" fill="#8b90a5">Log click → publish event → 302 to destination</text>
+      <circle cx="60" cy="92" r="9" fill="#a78bfa"/><text x="60" y="96" text-anchor="middle" font-size="8" fill="#fff" font-weight="700">2</text>
+
+      <!-- Redirect to destination -->
+      <rect x="430" y="14" width="200" height="34" rx="7" fill="#1a1d27" stroke="#4ade80" stroke-width="1.5"/>
+      <text x="530" y="30" text-anchor="middle" font-size="10" fill="#4ade80" font-weight="700">Destination URL</text>
+      <text x="530" y="42" text-anchor="middle" font-size="8" fill="#8b90a5">302 redirect → original link</text>
+      <line x1="260" y1="31" x2="428" y2="31" stroke="#4ade80" stroke-width="1" marker-end="url(#ah3)"/>
+      <text x="340" y="26" font-size="8" fill="#8b90a5">302</text>
+
+      <!-- PubSub -->
+      <line x1="190" y1="110" x2="190" y2="136" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#ah4)"/>
+      <rect x="80" y="136" width="300" height="32" rx="7" fill="#1a1d27" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="230" y="152" text-anchor="middle" font-size="10" fill="#22d3ee" font-weight="700">emails-tracking-link-queue-events</text>
+      <text x="230" y="164" text-anchor="middle" font-size="8" fill="#8b90a5">{linkId, contactId, campaignId, timestamp}</text>
+      <circle cx="80" cy="152" r="9" fill="#22d3ee"/><text x="80" y="156" text-anchor="middle" font-size="8" fill="#fff" font-weight="700">3</text>
+
+      <!-- Worker -->
+      <line x1="230" y1="168" x2="230" y2="192" stroke="#4ade80" stroke-width="1.5" marker-end="url(#ah3)"/>
+      <rect x="80" y="194" width="300" height="34" rx="7" fill="#1a1d27" stroke="#4ade80" stroke-width="1.5"/>
+      <text x="230" y="210" text-anchor="middle" font-size="10" fill="#4ade80" font-weight="700">tracking-link-worker</text>
+      <text x="230" y="222" text-anchor="middle" font-size="8" fill="#8b90a5">Writes click event, updates aggregate counts</text>
+      <circle cx="80" cy="211" r="9" fill="#4ade80"/><text x="80" y="215" text-anchor="middle" font-size="8" fill="#fff" font-weight="700">4</text>
+
+      <!-- Data stores -->
+      <rect x="80" y="256" width="140" height="34" rx="8" fill="#1a1d27" stroke="#f472b6" stroke-width="1.5"/>
+      <text x="150" y="272" text-anchor="middle" font-size="10" fill="#f472b6" font-weight="700">ClickHouse</text>
+      <text x="150" y="284" text-anchor="middle" font-size="8" fill="#8b90a5">Click event log</text>
+
+      <rect x="260" y="256" width="120" height="34" rx="8" fill="#1a1d27" stroke="#f472b6" stroke-width="1.5"/>
+      <text x="320" y="272" text-anchor="middle" font-size="10" fill="#f472b6" font-weight="700">Redis</text>
+      <text x="320" y="284" text-anchor="middle" font-size="8" fill="#8b90a5">Link cache</text>
+
+      <line x1="170" y1="228" x2="150" y2="254" stroke="#f472b6" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#ah6)"/>
+      <line x1="280" y1="228" x2="310" y2="254" stroke="#f472b6" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#ah6)"/>
+
+      <!-- Redis cache check (from tracking service) -->
+      <rect x="460" y="74" width="160" height="36" rx="7" fill="#1a1d27" stroke="#f472b6" stroke-width="1.5" stroke-dasharray="6,3"/>
+      <text x="540" y="90" text-anchor="middle" font-size="10" fill="#f472b6" font-weight="600">Redis (link lookup)</text>
+      <text x="540" y="102" text-anchor="middle" font-size="8" fill="#8b90a5">cached destination URL</text>
+      <line x1="320" y1="92" x2="458" y2="92" stroke="#f472b6" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#ah6)"/>
+      <text x="390" y="86" font-size="8" fill="#8b90a5">cache hit?</text>
+    </svg>
+  </div>
+
+</section>
+
+<!-- ════════════════ 10 SERVICES ════════════════ -->
+<section id="services">
+  <h2><span class="icon">🌐</span> 10 — External Service Map</h2>
+  <p class="section-desc">All inter-service calls use <code>InternalRequest</code> via Istio mesh. Service names are defined in <code>common/app-config</code>.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>SERVICE_NAME</th><th>Role in Email Ecosystem</th><th>Key Endpoints Called</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>CONVERSATIONS_MESSAGES_INTERNAL_API</code></td>
+          <td>🔴 <strong>Primary email sender</strong> — all outbound emails go through this</td>
+          <td><code>POST /messages</code> (with HTML + attachments)</td>
+        </tr>
+        <tr>
+          <td><code>CONVERSATIONS_API</code></td>
+          <td>Unsubscribe/resubscribe, message retrieval</td>
+          <td><code>POST /messages/email/unsubscribe</code>, <code>GET /messages/email/:id</code></td>
+        </tr>
+        <tr>
+          <td><code>CONVERSATIONS_REPORTING_API</code></td>
+          <td>Email delivery stats and recipient lists</td>
+          <td><code>GET /emails/aggregate</code>, <code>GET /emails</code></td>
+        </tr>
+        <tr>
+          <td><code>BULK_ACTIONS_API</code></td>
+          <td>Mass email dispatch orchestration (v2)</td>
+          <td><code>POST /request</code>, <code>GET /request/v2/list</code>, pause/resume/cancel</td>
+        </tr>
+        <tr>
+          <td><code>CONTACTS_API</code></td>
+          <td>Recipient data, smart lists, tagging</td>
+          <td><code>GET /search/2</code>, <code>POST /smartlist/search</code></td>
+        </tr>
+        <tr>
+          <td><code>TRACKING_LINK_API</code></td>
+          <td>Click tracking link management</td>
+          <td>Link registry + cache</td>
+        </tr>
+        <tr>
+          <td><code>EMAIL_ISV_API</code></td>
+          <td>Email provider contracts + sender verification</td>
+          <td><code>GET /contracts/location-email-provider</code></td>
+        </tr>
+        <tr>
+          <td><code>EMAIL_AI_API</code></td>
+          <td>AI content generation, subject lines</td>
+          <td>AI chat endpoints</td>
+        </tr>
+        <tr>
+          <td><code>LOCATIONS_API</code></td>
+          <td>Location data for multi-tenancy</td>
+          <td>Location details, custom fields</td>
+        </tr>
+        <tr>
+          <td><code>USERS_API</code></td>
+          <td>User info for audit + permissions</td>
+          <td>User details</td>
+        </tr>
+        <tr>
+          <td><code>MEDIAS_API</code></td>
+          <td>Media library for email images</td>
+          <td>Upload, list, details</td>
+        </tr>
+        <tr>
+          <td><code>FORMS_API</code></td>
+          <td>Form data for email forms</td>
+          <td>Form submissions</td>
+        </tr>
+        <tr>
+          <td><code>AUTOMATION_WORKFLOWS_BASE_API</code></td>
+          <td>Workflow engine integration</td>
+          <td>Workflow metadata</td>
+        </tr>
+        <tr>
+          <td><code>SNAPSHOTS_APPENGINE_API</code></td>
+          <td>Template snapshot rendering</td>
+          <td>Asset generation</td>
+        </tr>
+        <tr>
+          <td><code>BRAND_BOARDS_API</code></td>
+          <td>Brand colors, logos, fonts</td>
+          <td><code>GET /:locationId/default</code></td>
+        </tr>
+        <tr>
+          <td><code>COMPANIES_API</code></td>
+          <td>Company info for default emails</td>
+          <td>Company details</td>
+        </tr>
+        <tr>
+          <td><code>COUNTDOWN_TIMER_API</code></td>
+          <td>Countdown widget for emails</td>
+          <td>Timer CRUD</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ════════════════ 11 ENV ════════════════ -->
+<section id="env">
+  <h2><span class="icon">🔧</span> 11 — Environment & Config</h2>
+
+  <h3>Backend (leadgen-marketplace-backend)</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Variable / Config</th><th>Source</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>APP_CONFIG.EMAILS</code></td><td><code>common/app-config/index.ts</code></td><td>Route: <code>emails</code>, Port: <code>5076</code></td></tr>
+        <tr><td><code>emailCampaignTriggerEventPubSubTopic</code></td><td><code>common/config/index.ts</code></td><td>PubSub topic name</td></tr>
+        <tr><td><code>emailSnapshotPubSubTopic</code></td><td><code>common/config/index.ts</code></td><td>Snapshot queue topic</td></tr>
+        <tr><td><code>CLICKHOUSE_LEADGEN_EMAILS_*</code></td><td>Helm values / env</td><td>ClickHouse connection for email analytics</td></tr>
+        <tr><td><code>EMAILS_REDIS_HOST</code></td><td>Helm values / env</td><td>Redis cache for tracking links</td></tr>
+        <tr><td><code>EMAILS_OPENAI_API_KEY</code></td><td>Secret Manager</td><td>OpenAI key for AI features</td></tr>
+        <tr><td><code>BODY_PARSER_LIMIT</code></td><td><code>common/main</code></td><td>Request body size limit</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Frontend (ghl-email-builder)</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Variable</th><th>Source</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>import.meta.env.MODE</code></td><td>Vite build</td><td>Selects config bucket (development/staging/production)</td></tr>
+        <tr><td><code>marketPlaceURL</code></td><td><code>apps/*/src/config/index.ts</code></td><td>Backend API base URL</td></tr>
+        <tr><td><code>emailAiURL</code></td><td>Config per env</td><td>Email AI service URL</td></tr>
+        <tr><td><code>VITE_CUSTOM_ENV_LOCATION_ID</code></td><td><code>.env</code> (local dev)</td><td>Dev location context</td></tr>
+        <tr><td><code>VITE_CUSTOM_ENV_API_KEY</code></td><td><code>.env</code> (local dev)</td><td>Dev API key</td></tr>
+        <tr><td><code>VITE_CUSTOM_ENV_USER_ID</code></td><td><code>.env</code> (local dev)</td><td>Dev user ID</td></tr>
+        <tr><td><code>SENTRY_AUTH_TOKEN</code></td><td>CI env</td><td>Sentry error tracking</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Key Config Files</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>File</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>common/app-config/index.ts</code></td><td>App routes, ports, service names for all apps in monorepo</td></tr>
+        <tr><td><code>common/config/index.ts</code></td><td>PubSub topic names, feature flags, shared config</td></tr>
+        <tr><td><code>apps/emails/src/util/constHelper.ts</code></td><td>Email-specific PubSub topics, message types, constants</td></tr>
+        <tr><td><code>apps/emails/src/util/helper.ts</code></td><td>Shared business logic, Pendo events, snapshot publishing</td></tr>
+        <tr><td><code>apps/emails/src/util/scheduleHelper.ts</code></td><td>Bulk action v1/v2 helpers, AB test logic</td></tr>
+        <tr><td><code>apps/emails/deployments/</code></td><td>Helm values per worker and server (staging/production)</td></tr>
+        <tr><td><code>nest-cli-workers.json</code></td><td>Worker app registration for Nest CLI builds</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ════════════════ 12 SETUP ════════════════ -->
+<section id="setup">
+  <h2><span class="icon">🚀</span> 12 — New Developer Setup</h2>
+  <p class="section-desc">Step-by-step guide to get the email ecosystem running locally for development.</p>
+
+  <h3>Prerequisites</h3>
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-title">System Requirements</div>
+      <ul>
+        <li>Node.js 21.7.3 (via Volta or nvm)</li>
+        <li>Yarn 1.x (classic)</li>
+        <li>Docker (for MongoDB, Redis, ClickHouse locally)</li>
+        <li>gcloud CLI (authenticated for GCP access)</li>
+        <li>VPN access to Istio mesh (for inter-service calls)</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-title">Access Requirements</div>
+      <ul>
+        <li>GitHub org membership (for repo access)</li>
+        <li>npm registry auth token (for <code>@platform-ui</code>, <code>@frontend-core</code>, <code>@gohighlevel</code> packages)</li>
+        <li>GCP project access (for PubSub, Cloud Tasks, Secret Manager)</li>
+        <li>Staging environment credentials</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Step 1 — Clone Repositories</h3>
+  <ol class="checklist">
+    <li><span class="step">1</span>
+      <div>
+        <strong>Clone the frontend repo</strong><br>
+        <code>git clone git@github.com:AnshuGoHighLevel/ghl-email-builder.git ~/projects/ghl-email-builder</code>
+      </div>
+    </li>
+    <li><span class="step">2</span>
+      <div>
+        <strong>Clone the backend repo</strong><br>
+        <code>git clone git@github.com:AnshuGoHighLevel/leadgen-marketplace-backend.git ~/projects/leadgen-marketplace-backend</code>
+      </div>
+    </li>
+    <li><span class="step">3</span>
+      <div>
+        <strong>(Optional) Clone supporting repos</strong><br>
+        <code>ghl-email-components</code>, <code>leadgen-tests</code>, <code>spm-ts</code> if needed for full local env
+      </div>
+    </li>
+  </ol>
+
+  <h3>Step 2 — Configure npm Registry Auth</h3>
+  <ol class="checklist">
+    <li><span class="step">1</span>
+      <div>
+        <strong>Get your npm token</strong> from the team (or generate via npm login to the private registry). If you see 401/403 errors during install, the <code>platform-core-ar-login</code> skill can help troubleshoot.
+      </div>
+    </li>
+    <li><span class="step">2</span>
+      <div>
+        <strong>Configure <code>.npmrc</code></strong> in your home directory with the scoped registry tokens for <code>@platform-ui</code>, <code>@frontend-core</code>, <code>@gohighlevel</code>, <code>@ghl-plugins</code>, <code>@platform-core</code>.
+      </div>
+    </li>
+  </ol>
+
+  <h3>Step 3 — Install Dependencies</h3>
+  <ol class="checklist">
+    <li><span class="step">1</span>
+      <div>
+        <strong>Frontend:</strong> <code>cd ghl-email-builder && yarn install</code><br>
+        This installs all workspace apps. Lerna + Yarn Workspaces links them.
+      </div>
+    </li>
+    <li><span class="step">2</span>
+      <div>
+        <strong>Backend:</strong> <code>cd leadgen-marketplace-backend && yarn install</code><br>
+        This installs all apps including emails, email-ai, tracking-link, etc.
+      </div>
+    </li>
+  </ol>
+
+  <h3>Step 4 — Environment Setup</h3>
+  <ol class="checklist">
+    <li><span class="step">1</span>
+      <div>
+        <strong>Frontend <code>.env</code></strong> — Copy <code>.env.example</code> (if exists) or create <code>.env</code> at repo root with:<br>
+        <code>VITE_CUSTOM_ENV_LOCATION_ID</code>, <code>VITE_CUSTOM_ENV_API_KEY</code>, <code>VITE_CUSTOM_ENV_USER_ID</code>, <code>VITE_CUSTOM_ENV_TEMPLATE_ID</code>, <code>VITE_CUSTOM_ENV_TIME_ZONE</code><br>
+        <em>Get values from a teammate or staging dashboard.</em>
+      </div>
+    </li>
+    <li><span class="step">2</span>
+      <div>
+        <strong>Backend <code>.env</code></strong> — Copy from <code>.env.example</code> or ask a teammate. Key vars: MongoDB connection strings, Redis host, PubSub project, ClickHouse credentials. Use <code>dotenv-safe</code> to validate.
+      </div>
+    </li>
+  </ol>
+
+  <h3>Step 5 — Run Locally</h3>
+  <ol class="checklist">
+    <li><span class="step">1</span>
+      <div>
+        <strong>Frontend: email-home</strong> (main listings app)<br>
+        <code>cd apps/email-home && yarn dev</code> → runs on <strong>port 3003</strong>
+      </div>
+    </li>
+    <li><span class="step">2</span>
+      <div>
+        <strong>Frontend: email-builder</strong> (editor)<br>
+        <code>cd apps/email-builder && yarn dev</code> → runs on <strong>port 3002</strong>
+      </div>
+    </li>
+    <li><span class="step">3</span>
+      <div>
+        <strong>Frontend: email-preview</strong> (MF remote)<br>
+        <code>cd apps/email-preview && yarn dev</code>
+      </div>
+    </li>
+    <li><span class="step">4</span>
+      <div>
+        <strong>Backend: emails API server</strong><br>
+        <code>cd leadgen-marketplace-backend && yarn start:dev emails</code> → runs on <strong>port 5076</strong>
+      </div>
+    </li>
+    <li><span class="step">5</span>
+      <div>
+        <strong>Backend: individual worker</strong> (optional)<br>
+        <code>yarn start:dev leadgen-emails-trigger-event-worker</code> (replace with any worker name from <code>nest-cli-workers.json</code>)
+      </div>
+    </li>
+  </ol>
+
+  <h3>Step 6 — Verify Setup</h3>
+  <ol class="checklist">
+    <li><span class="step">✓</span>
+      <div>
+        <strong>Frontend:</strong> Open <code>http://localhost:3003/location/{locationId}/marketing/emails</code> — you should see the template list. The builder iframe will load from port 3002.
+      </div>
+    </li>
+    <li><span class="step">✓</span>
+      <div>
+        <strong>Backend:</strong> Hit <code>http://localhost:5076/emails/builder/all</code> with auth headers — you should get a template list response.
+      </div>
+    </li>
+    <li><span class="step">✓</span>
+      <div>
+        <strong>Full stack:</strong> For end-to-end testing through the GHL shell, you may need <code>spm-ts</code> running to provide the auth context and Postmate handshake. Ask the team for the local spm-ts setup guide.
+      </div>
+    </li>
+  </ol>
+
+  <h3>Common Gotchas</h3>
+  <div class="card-grid">
+    <div class="card" style="border-color:var(--yellow)">
+      <div class="card-title">⚠️ npm Install Failures</div>
+      <p>401/403 errors on <code>@platform-ui/*</code> packages — check your <code>.npmrc</code> tokens. Run the <code>platform-core-ar-login</code> skill if available.</p>
+    </div>
+    <div class="card" style="border-color:var(--yellow)">
+      <div class="card-title">⚠️ Builder Iframe Blank</div>
+      <p>email-builder loads via Postmate iframe from email-home. Both must run simultaneously. Check that ports 3002 + 3003 are not conflicting.</p>
+    </div>
+    <div class="card" style="border-color:var(--yellow)">
+      <div class="card-title">⚠️ Backend Service Calls Fail</div>
+      <p>Inter-service calls (Conversations, Bulk Actions, etc.) require Istio mesh / VPN. Locally, you may need to mock these or point to staging backend.</p>
+    </div>
+    <div class="card" style="border-color:var(--yellow)">
+      <div class="card-title">⚠️ Webpack vs Vite Apps</div>
+      <p>email-home and email-builder use Vite. email-preview and default-emails use Webpack. Different dev server commands and config patterns.</p>
+    </div>
+    <div class="card" style="border-color:var(--yellow)">
+      <div class="card-title">⚠️ Vuex Not Pinia</div>
+      <p>State management uses Vuex 4 (not Pinia). Each app has its own isolated store. State syncs between apps via Postmate messages.</p>
+    </div>
+    <div class="card" style="border-color:var(--yellow)">
+      <div class="card-title">⚠️ Dual Mongo Connections</div>
+      <p>Backend uses two MongoDB pools: <code>standardMongoConnection</code> (Schedule, EmailBuilder) and <code>leadgenStandard</code> (everything else). Check which connection your model uses.</p>
+    </div>
+  </div>
+
+  <h3>Key Files to Read First</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>File</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td><code>apps/emails/src/emails.module.ts</code></td><td>Root module — see all feature modules and how they wire together</td></tr>
+        <tr><td><code>apps/emails/src/util/constHelper.ts</code></td><td>All PubSub topics and message type constants</td></tr>
+        <tr><td><code>apps/emails/src/util/helper.ts</code></td><td>Shared business logic — understand common patterns</td></tr>
+        <tr><td><code>apps/emails/src/schedule/schedule.service.ts</code></td><td>Campaign flow — the most complex service file</td></tr>
+        <tr><td><code>apps/emails/src/sequences/services/sequence-action.service.ts</code></td><td>Sequence sending — where emails actually get sent</td></tr>
+        <tr><td><code>common/app-config/index.ts</code></td><td>All service names, ports, routes</td></tr>
+        <tr><td><code>apps/email-home/src/router.ts</code></td><td>Frontend route structure — understand page navigation</td></tr>
+        <tr><td><code>apps/email-builder/src/store/state.ts</code></td><td>Builder state shape — understand the editor data model</td></tr>
+        <tr><td><code>apps/common/service/index.ts</code></td><td>Frontend API layer — understand how FE talks to BE</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ════════════════ FOOTER ════════════════ -->
+<section style="text-align:center; padding:48px 0; border-top:1px solid var(--border);">
+  <p style="color:var(--text-muted);font-size:13px;">
+    Generated on <strong>April 6, 2026</strong> — GHL Email Ecosystem Architecture Guide<br>
+    Repos: <code>ghl-email-builder</code> · <code>leadgen-marketplace-backend</code><br>
+    <span style="opacity:.5;">For internal use only</span>
+  </p>
+</section>
+
+</div><!-- /container -->
+</body>
+</html>
