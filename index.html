@@ -221,7 +221,10 @@
     <a href="#flows">Flow Diagrams</a>
   <a href="#services">Service Map</a>
   <a href="#env">Environment</a>
+  <a href="#pipeline">Send Pipeline</a>
+  <a href="#deploy">Deployment</a>
   <a href="#setup">Dev Setup</a>
+  <a href="#debugging">Debugging</a>
 </nav>
 
 <!-- ════════════════ HERO ════════════════ -->
@@ -232,9 +235,9 @@
     <div class="badge"><div class="dot" style="background:var(--accent)"></div> 4 Frontend Apps</div>
     <div class="badge"><div class="dot" style="background:var(--accent2)"></div> 1 Backend Monorepo</div>
     <div class="badge"><div class="dot" style="background:var(--green)"></div> 10+ Workers</div>
-    <div class="badge"><div class="dot" style="background:var(--cyan)"></div> 10+ PubSub Topics</div>
+    <div class="badge"><div class="dot" style="background:var(--cyan)"></div> 13 PubSub Topics</div>
     <div class="badge"><div class="dot" style="background:var(--pink)"></div> 20+ Mongo Collections</div>
-    <div class="badge"><div class="dot" style="background:var(--orange)"></div> 12+ External Services</div>
+    <div class="badge"><div class="dot" style="background:var(--orange)"></div> 17+ External Services</div>
   </div>
 </div>
 
@@ -255,7 +258,10 @@
     <a href="#flows"><span class="num">09</span> Flow Diagrams (8 flows)</a>
     <a href="#services"><span class="num">10</span> External Service Map</a>
     <a href="#env"><span class="num">11</span> Environment & Config</a>
-    <a href="#setup"><span class="num">12</span> New Developer Setup</a>
+    <a href="#pipeline"><span class="num">12</span> Pre-Send Template Pipeline</a>
+    <a href="#deploy"><span class="num">13</span> Deployment & CI/CD</a>
+    <a href="#setup"><span class="num">14</span> New Developer Setup</a>
+    <a href="#debugging"><span class="num">15</span> Debugging & Troubleshooting</a>
   </div>
 </section>
 
@@ -300,7 +306,7 @@
         <li><strong>MongoDB</strong> — Primary data (templates, schedules, sequences, stats)</li>
         <li><strong>ClickHouse</strong> — Analytics (trigger events, product stats, reporting rollups)</li>
         <li><strong>Redis</strong> — Caching (tracking links, sessions)</li>
-        <li><strong>GCS</strong> — Asset storage (snapshots, images)</li>
+        <li><strong>Firebase Storage / GCS</strong> — Template HTML files (downloadUrl), snapshot images, assets</li>
         <li><strong>Cloud Tasks</strong> — Delayed sequence execution</li>
       </ul>
     </div>
@@ -310,7 +316,7 @@
 <!-- ════════════════ 02 REPOS ════════════════ -->
 <section id="repos">
   <h2><span class="icon">📂</span> 02 — Repositories</h2>
-  <p class="section-desc">All code lives in two primary repos with a few satellite repos for specialized tools.</p>
+  <p class="section-desc">Core code lives in two primary repos (frontend + backend). Several satellite repos handle workflows, template library, brand kit, preview rendering, and the app shell.</p>
 
   <div class="table-wrap">
     <table>
@@ -347,6 +353,36 @@
           <td><span class="badge" style="border-color:var(--yellow)"><div class="dot" style="background:var(--yellow)"></div>Shell</span></td>
           <td><code>~/projects/spm-ts</code></td>
           <td>GHL app shell — hosts email MFAs via Module Federation / iframe</td>
+        </tr>
+        <tr>
+          <td><strong>automation-workflows-backend</strong></td>
+          <td><span class="badge" style="border-color:var(--accent2)"><div class="dot" style="background:var(--accent2)"></div>Backend</span></td>
+          <td><code>~/projects/automation-workflows-backend</code></td>
+          <td>Workflow engine — Send Email action calls emails API, template compilation, snapshot push</td>
+        </tr>
+        <tr>
+          <td><strong>automation-workflows-frontend</strong></td>
+          <td><span class="badge" style="border-color:var(--accent)"><div class="dot" style="background:var(--accent)"></div>Frontend</span></td>
+          <td><code>~/projects/automation-workflows-frontend</code></td>
+          <td>Workflow builder UI — email action node (SendEmailRevamp.vue), template sync toggle</td>
+        </tr>
+        <tr>
+          <td><strong>ghl-template-library</strong></td>
+          <td><span class="badge" style="border-color:var(--accent)"><div class="dot" style="background:var(--accent)"></div>Frontend</span></td>
+          <td><code>~/projects/ghl-template-library</code></td>
+          <td>Template marketplace UI — browse, import, and share email templates</td>
+        </tr>
+        <tr>
+          <td><strong>builder-preview</strong></td>
+          <td><span class="badge" style="border-color:var(--accent2)"><div class="dot" style="background:var(--accent2)"></div>Service</span></td>
+          <td><code>~/projects/builder-preview</code></td>
+          <td>Email template preview renderer service</td>
+        </tr>
+        <tr>
+          <td><strong>ghl-brand-boards</strong></td>
+          <td><span class="badge" style="border-color:var(--accent)"><div class="dot" style="background:var(--accent)"></div>Frontend</span></td>
+          <td><code>~/projects/ghl-brand-boards</code></td>
+          <td>Brand kit UI — colors, logos, fonts used by email templates</td>
         </tr>
       </tbody>
     </table>
@@ -448,7 +484,7 @@
         <div class="flow-box fb-db">MongoDB (leadgen)<div class="flow-label">Sequences, Settings, Triggers…</div></div>
         <div class="flow-box fb-db">ClickHouse<div class="flow-label">Stats, Trigger Events, Rollups</div></div>
         <div class="flow-box fb-db">Redis<div class="flow-label">Cache, Tracking Links</div></div>
-        <div class="flow-box fb-db">GCS<div class="flow-label">Assets, Snapshots</div></div>
+        <div class="flow-box fb-db">Firebase / GCS<div class="flow-label">Template HTML, Snapshots</div></div>
         <div class="flow-box fb-db">Cloud Tasks<div class="flow-label">Delayed Sequences</div></div>
       </div>
     </div>
@@ -459,6 +495,82 @@
 <section id="frontend">
   <h2><span class="icon">🖼️</span> 04 — Frontend: ghl-email-builder</h2>
   <p class="section-desc">A Lerna monorepo with 4 deployable apps + a shared common package. Uses Vue 3, Vuex 4, Tailwind, and Highrise design system. Apps communicate via Postmate (iframe) and Module Federation.</p>
+
+  <h3>How spm-ts Loads Email Apps (iframe vs MFA)</h3>
+  <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">The GHL app shell (<code>spm-ts</code>) is the top-level SPA that hosts all product micro-frontends. For the email ecosystem, it uses <strong>two different loading mechanisms</strong>:</p>
+
+  <div class="svg-diagram-wrap">
+    <div class="diagram-title">spm-ts → Email App Loading Architecture</div>
+    <svg viewBox="0 0 1060 400" width="1060" height="400" xmlns="http://www.w3.org/2000/svg">
+      <!-- spm-ts shell -->
+      <rect x="350" y="10" width="360" height="50" rx="10" fill="#1a1d27" stroke="#facc15" stroke-width="2"/>
+      <text x="530" y="32" text-anchor="middle" font-size="13" fill="#facc15" font-weight="700">spm-ts (GHL App Shell)</text>
+      <text x="530" y="48" text-anchor="middle" font-size="9" fill="#8b90a5">Vue 3 SPA — hosts all product micro-frontends</text>
+
+      <!-- iframe path (left) -->
+      <line x1="430" y1="60" x2="250" y2="100" stroke="#6c8cff" stroke-width="2" marker-end="url(#ah1)"/>
+      <text x="320" y="78" font-size="10" fill="#6c8cff" font-weight="700">iframe (Postmate)</text>
+
+      <!-- email-home -->
+      <rect x="80" y="102" width="340" height="60" rx="8" fill="#1a1d27" stroke="#6c8cff" stroke-width="1.5"/>
+      <text x="250" y="122" text-anchor="middle" font-size="12" fill="#6c8cff" font-weight="700">email-home (port 3003)</text>
+      <text x="250" y="138" text-anchor="middle" font-size="9" fill="#8b90a5">Loaded via <tspan fill="#facc15">emailHomeAppUrl</tspan> in spm-ts config</text>
+      <text x="250" y="152" text-anchor="middle" font-size="9" fill="#8b90a5">Receives auth context (userId, apiKey, locationId) via URL params + Postmate handshake</text>
+
+      <!-- email-home → email-builder (nested iframe) -->
+      <line x1="250" y1="162" x2="250" y2="196" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#ah2)"/>
+      <text x="264" y="182" font-size="9" fill="#a78bfa" font-weight="600">nested iframe (Postmate)</text>
+
+      <rect x="80" y="198" width="340" height="60" rx="8" fill="#1a1d27" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="250" y="218" text-anchor="middle" font-size="12" fill="#a78bfa" font-weight="700">email-builder (port 3002)</text>
+      <text x="250" y="234" text-anchor="middle" font-size="9" fill="#8b90a5">Loaded by email-home via <tspan fill="#facc15">builderAppUrl</tspan> in email-home config</text>
+      <text x="250" y="248" text-anchor="middle" font-size="9" fill="#8b90a5">Drag-and-drop editor — NO routes, single canvas surface</text>
+
+      <!-- MFA path (right) -->
+      <line x1="630" y1="60" x2="810" y2="100" stroke="#4ade80" stroke-width="2" marker-end="url(#ah3)"/>
+      <text x="740" y="78" font-size="10" fill="#4ade80" font-weight="700">Module Federation</text>
+
+      <!-- email-preview -->
+      <rect x="640" y="102" width="340" height="60" rx="8" fill="#1a1d27" stroke="#4ade80" stroke-width="1.5"/>
+      <text x="810" y="122" text-anchor="middle" font-size="12" fill="#4ade80" font-weight="700">email-preview (emailPreviewApp)</text>
+      <text x="810" y="138" text-anchor="middle" font-size="9" fill="#8b90a5">Loaded via <tspan fill="#facc15">asyncRemoteApps.emailPreviewApp</tspan> in spm-ts</text>
+      <text x="810" y="152" text-anchor="middle" font-size="9" fill="#8b90a5">Webpack MF remote — exposes ./App, ./ImportTemplate</text>
+
+      <!-- default-emails -->
+      <rect x="640" y="182" width="340" height="50" rx="8" fill="#1a1d27" stroke="#4ade80" stroke-width="1.5" stroke-dasharray="6,3"/>
+      <text x="810" y="202" text-anchor="middle" font-size="12" fill="#4ade80" font-weight="700">default-emails (defaultEmailTemplatesApp)</text>
+      <text x="810" y="218" text-anchor="middle" font-size="9" fill="#8b90a5">Webpack MF remote — exposes ./List</text>
+
+      <!-- Legend -->
+      <rect x="80" y="290" width="900" height="100" rx="10" fill="rgba(255,255,255,.02)" stroke="var(--border)" stroke-width="1"/>
+      <text x="530" y="310" text-anchor="middle" font-size="11" fill="var(--text-muted)" font-weight="700">WHY TWO MECHANISMS?</text>
+      <text x="100" y="332" font-size="10" fill="#6c8cff" font-weight="700">iframe (Postmate):</text>
+      <text x="260" y="332" font-size="10" fill="#8b90a5">Full app isolation. email-home and email-builder are complete SPAs with their own routes,</text>
+      <text x="260" y="348" font-size="10" fill="#8b90a5">stores, and lifecycle. Communication via Postmate message passing (parent↔child). Nested: spm-ts → email-home → email-builder.</text>
+      <text x="100" y="372" font-size="10" fill="#4ade80" font-weight="700">Module Federation:</text>
+      <text x="260" y="372" font-size="10" fill="#8b90a5">Shared runtime. email-preview and default-emails expose Vue components loaded directly into spm-ts's</text>
+      <text x="260" y="388" font-size="10" fill="#8b90a5">bundle at runtime via Webpack remoteEntry.js. Shares Vue, router, and store with the host. Lighter weight, no iframe overhead.</text>
+    </svg>
+  </div>
+
+  <div class="card-grid" style="margin-bottom:24px;">
+    <div class="card" style="border-color:var(--accent)">
+      <div class="card-title" style="color:var(--accent);">spm-ts Config Keys (for local dev)</div>
+      <ul>
+        <li><code>emailHomeAppUrl</code> — URL for the email-home iframe (set to <code>http://localhost:3003</code> for local dev, ~line 60 in development config)</li>
+        <li><code>asyncRemoteApps.emailPreviewApp</code> — Webpack MF remote URL for email-preview (set to local <code>remoteEntry.js</code> URL)</li>
+        <li><code>asyncRemoteApps.defaultEmailTemplatesApp</code> — Webpack MF remote URL for default-emails</li>
+      </ul>
+    </div>
+    <div class="card" style="border-color:var(--accent2)">
+      <div class="card-title" style="color:var(--accent2);">email-home Config Keys</div>
+      <ul>
+        <li><code>builderAppUrl</code> — URL for the email-builder iframe (in <code>apps/email-home/src/config/index.ts</code>, ~line 49)</li>
+        <li>Also set in <code>apps/email-preview/src/config/index.ts</code> (~line 29) since preview also opens the builder</li>
+        <li><code>override = true</code> — in config, makes <code>marketPlaceURL</code> point to <code>http://localhost:5076</code> for local backend</li>
+      </ul>
+    </div>
+  </div>
 
   <h3>Repository Structure</h3>
   <div class="tree"><span class="dir">ghl-email-builder/</span>
@@ -932,13 +1044,51 @@
   <h3>ClickHouse Tables</h3>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Area</th><th>Purpose</th><th>Written By</th></tr></thead>
+      <thead><tr><th>Table Name</th><th>Engine</th><th>Purpose</th><th>Written By</th></tr></thead>
       <tbody>
-        <tr><td>Trigger Events</td><td>Campaign trigger event log (high volume)</td><td>trigger-event-worker</td></tr>
-        <tr><td>Campaign Stats</td><td>Aggregated campaign metrics</td><td>campaign-stats-worker</td></tr>
-        <tr><td>Product Stats</td><td>Product attribution for email campaigns</td><td>product-stats-worker</td></tr>
-        <tr><td>Tracking Link</td><td>Click-through events</td><td>tracking-link-worker</td></tr>
-        <tr><td>Reporting Rollups</td><td>CDC email event rollups</td><td>reporting-rollup-email-worker (apps/reporting)</td></tr>
+        <tr><td><code>email_builder_stats</code></td><td>MergeTree</td><td>Raw campaign/workflow/bulk email events (open, click, bounce, delivered, etc.)</td><td>campaign-stats-worker</td></tr>
+        <tr><td><code>email_sequence_stats_raw</code></td><td>MergeTree</td><td>Raw sequence/action email events</td><td>campaign-stats-worker</td></tr>
+        <tr><td><code>email_sequence_event_stats_aggregated</code></td><td>AggregatingMergeTree</td><td>Pre-aggregated sequence stats (use <code>uniqExactMerge()</code>, no FINAL needed)</td><td>campaign-stats-worker</td></tr>
+        <tr><td><code>email_campaign_trigger_events</code></td><td>MergeTree</td><td>Trigger event tracking (contactId per triggerId, high volume)</td><td>trigger-event-worker</td></tr>
+        <tr><td><code>email_builder_stats</code> (revenue)</td><td>—</td><td>Product attribution revenue rows on existing stats table</td><td>product-stats-worker</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h4>Source Type Routing (<code>statsHelper.ts</code>)</h4>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Source Type</th><th>View / Table</th><th>ID Column</th><th>ID Format</th></tr></thead>
+      <tbody>
+        <tr><td><code>CAMPAIGN</code></td><td><code>email_campaign_stats</code></td><td>campaignId</td><td>Schedule ObjectId</td></tr>
+        <tr><td><code>WORKFLOW</code></td><td><code>workflow_email_stats</code></td><td>campaignId + workflowStepId</td><td><code>workflow_</code> prefix</td></tr>
+        <tr><td><code>BULK</code></td><td><code>bulk_email_stats</code></td><td>bulkReqId</td><td><code>bulkAction_</code> prefix</td></tr>
+        <tr><td><code>EMAIL_SEQUENCE</code></td><td><code>email_sequence_stats_raw</code></td><td>sequenceId + sourceId</td><td><code>email-sequence-</code> prefix</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h4>Critical Pattern: The <code>accepted=1</code> Sent-Set Anchor</h4>
+  <div class="card" style="border-color:var(--red);margin:12px 0;">
+    <div class="card-title" style="color:var(--red);">⚠️ Must Understand — All Stats Queries Depend On This</div>
+    <p>The first ClickHouse row inserted when an email is sent has <code>accepted=1</code> and all other stat fields <code>0</code>. This is the <strong>"sent-set anchor"</strong> — every stats aggregation query uses it to scope "who was sent to" in a date range:</p>
+    <pre style="background:var(--surface2);padding:12px;border-radius:6px;font-size:12px;margin-top:8px;overflow-x:auto;"><code>WHERE (sourceId, contactId) IN (
+  SELECT sourceId, contactId FROM table
+  WHERE accepted = 1 AND delivered = 0
+    AND createdAt BETWEEN start AND end
+)</code></pre>
+    <p style="margin-top:8px;">Used by: <code>fetchDailyStats()</code>, <code>fetchTotalStatsBySource()</code>, <code>fetchTopPerformingCampaigns()</code>, <code>fetchTotalSequenceStats()</code>, and all export queries. <strong>Without these anchor rows, all stats queries break.</strong></p>
+  </div>
+
+  <h3>ClickHouse Connection</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Component</th><th>Path / Variable</th></tr></thead>
+      <tbody>
+        <tr><td>Connection module</td><td><code>src/common/clickhouse/baseV2.ts</code> — singleton via <code>ClickHouseClientFactory</code></td></tr>
+        <tr><td>Retry helpers</td><td><code>src/helpers/clickhouse.helper.ts</code> — <code>initEmailsClickHouse()</code> (3 retries), <code>insertWithRetry()</code></td></tr>
+        <tr><td>All query functions</td><td><code>src/util/clickhouseHelper.ts</code> (10,600+ lines — the largest file in the codebase)</td></tr>
+        <tr><td>Env vars</td><td><code>CLICKHOUSE_LEADGEN_EMAILS_URL</code>, <code>_DATABASE</code>, <code>_USER</code>, <code>_PASSWORD</code></td></tr>
       </tbody>
     </table>
   </div>
@@ -1779,6 +1929,16 @@
           <td>Countdown widget for emails</td>
           <td>Timer CRUD</td>
         </tr>
+        <tr>
+          <td><code>FUNNELS_INFRA_API</code></td>
+          <td>Cross-product analytics integration</td>
+          <td>Funnel attribution data</td>
+        </tr>
+        <tr>
+          <td><code>LOGS_API</code></td>
+          <td>Audit logging</td>
+          <td>Activity log writes</td>
+        </tr>
       </tbody>
     </table>
   </div>
@@ -1837,9 +1997,173 @@
   </div>
 </section>
 
-<!-- ════════════════ 12 SETUP ════════════════ -->
+<!-- ════════════════ 12 PRE-SEND PIPELINE ════════════════ -->
+<section id="pipeline">
+  <h2><span class="icon">🔧</span> 12 — Pre-Send Template Pipeline</h2>
+  <p class="section-desc">Before a campaign email is actually sent, the template goes through a multi-step processing pipeline. Understanding this chain is critical for debugging "why does my email look wrong" issues.</p>
+
+  <h3>The Full Processing Chain</h3>
+  <div class="svg-diagram-wrap">
+    <div class="diagram-title">Template Processing Pipeline — startCampaign() Call Chain</div>
+    <svg viewBox="0 0 1100 320" width="1100" height="320" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0" y="0" width="1100" height="320" fill="rgba(167,139,250,.03)"/>
+
+      <!-- Step 1 -->
+      <rect x="30" y="30" width="190" height="60" rx="8" fill="#1a1d27" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="125" y="52" text-anchor="middle" font-size="11" fill="#a78bfa" font-weight="700">1. updatePreviewText()</text>
+      <text x="125" y="68" text-anchor="middle" font-size="9" fill="#8b90a5">Renders MJML → HTML</text>
+      <text x="125" y="80" text-anchor="middle" font-size="9" fill="#8b90a5">Uploads to Firebase Storage</text>
+
+      <line x1="220" y1="60" x2="270" y2="60" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#ah2)"/>
+
+      <!-- Step 2 -->
+      <rect x="272" y="30" width="200" height="60" rx="8" fill="#1a1d27" stroke="#fb923c" stroke-width="1.5"/>
+      <text x="372" y="52" text-anchor="middle" font-size="11" fill="#fb923c" font-weight="700">2. utmTrackingProcess()</text>
+      <text x="372" y="68" text-anchor="middle" font-size="9" fill="#8b90a5">Injects UTM params into links</text>
+      <text x="372" y="80" text-anchor="middle" font-size="9" fill="#8b90a5">Re-uploads to Firebase</text>
+
+      <line x1="472" y1="60" x2="522" y2="60" stroke="#fb923c" stroke-width="1.5" marker-end="url(#ah5)"/>
+
+      <!-- Step 3 -->
+      <rect x="524" y="30" width="220" height="60" rx="8" fill="#1a1d27" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="634" y="52" text-anchor="middle" font-size="11" fill="#22d3ee" font-weight="700">3. trackingLinkProcess()</text>
+      <text x="634" y="68" text-anchor="middle" font-size="9" fill="#8b90a5">Wraps links with click-tracking</text>
+      <text x="634" y="80" text-anchor="middle" font-size="9" fill="#8b90a5">Re-uploads (OVERWRITES original)</text>
+
+      <line x1="744" y1="60" x2="794" y2="60" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#ah4)"/>
+
+      <!-- Step 4 -->
+      <rect x="796" y="30" width="220" height="60" rx="8" fill="#1a1d27" stroke="#4ade80" stroke-width="1.5"/>
+      <text x="906" y="52" text-anchor="middle" font-size="11" fill="#4ade80" font-weight="700">4. startV2BulkActions()</text>
+      <text x="906" y="68" text-anchor="middle" font-size="9" fill="#8b90a5">Sends downloadUrl to Bulk Actions</text>
+      <text x="906" y="80" text-anchor="middle" font-size="9" fill="#8b90a5">Bulk Actions API dispatches</text>
+
+      <!-- Protect/Restore pattern -->
+      <rect x="30" y="120" width="710" height="80" rx="8" fill="#1a1d27" stroke="#facc15" stroke-width="1.5" stroke-dasharray="6,3"/>
+      <text x="385" y="142" text-anchor="middle" font-size="12" fill="#facc15" font-weight="700">Protect / Restore Handlebars Pattern (used in steps 2 & 3)</text>
+      <text x="385" y="162" text-anchor="middle" font-size="10" fill="#8b90a5">Before DOM parsing: <tspan fill="#4ade80">{{contact.name}}</tspan> → <tspan fill="#fb923c">&lt;!--TOKEN_0--&gt;</tspan></text>
+      <text x="385" y="180" text-anchor="middle" font-size="10" fill="#8b90a5">After DOM parsing: <tspan fill="#fb923c">&lt;!--TOKEN_0--&gt;</tspan> → <tspan fill="#4ade80">{{contact.name}}</tspan> (handlebars-sanitizer.ts)</text>
+      <text x="385" y="196" text-anchor="middle" font-size="9" fill="#8b90a5">This prevents Handlebars syntax from being mangled by HTML parsers. HTML comments survive all parsers.</text>
+
+      <!-- Compilation -->
+      <rect x="30" y="230" width="1036" height="70" rx="8" fill="#1a1d27" stroke="#f472b6" stroke-width="1.5"/>
+      <text x="548" y="252" text-anchor="middle" font-size="12" fill="#f472b6" font-weight="700">5. Per-Recipient Compilation (at send time — in Conversations service, NOT emails)</text>
+      <text x="548" y="270" text-anchor="middle" font-size="10" fill="#8b90a5">Bulk Actions fetches HTML from downloadUrl → for each contact: <tspan fill="#4ade80">handlebars.compile(body)(templateParams)</tspan></text>
+      <text x="548" y="288" text-anchor="middle" font-size="10" fill="#8b90a5">Resolves: {{contact.first_name}}, {{user.email_signature}}, {{custom_values.*}} → creates final per-recipient HTML → sends via email-isv → Mailgun/SMTP</text>
+    </svg>
+  </div>
+
+  <h3>Key Files in the Pipeline</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>File</th><th>Role</th></tr></thead>
+      <tbody>
+        <tr><td><code>schedule.service.ts:286</code></td><td><code>startCampaign()</code> — orchestrates the full chain above</td></tr>
+        <tr><td><code>util/scheduleHelper.ts:1795</code></td><td><code>utmTrackingProcess()</code> — UTM param injection</td></tr>
+        <tr><td><code>util/scheduleHelper.ts:1661</code></td><td><code>trackingLinkProcess()</code> — click-tracking link wrapping</td></tr>
+        <tr><td><code>util/html-tracking.helper.ts:153</code></td><td><code>trackingLinkProcessOptimized()</code> — actual link rewriting</td></tr>
+        <tr><td><code>util/tracking-processor.util.ts:30</code></td><td><code>processHtmlTrackingWithRedisCache()</code> — UTM with caching</td></tr>
+        <tr><td><code>common/helpers/handlebars-sanitizer.ts</code></td><td>Protect/restore Handlebars tokens during HTML parsing</td></tr>
+        <tr><td><code>builder.service.ts</code></td><td><code>updatePreviewText()</code> — MJML→HTML render + Firebase upload</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card" style="border-color:var(--red);margin:16px 0;">
+    <div class="card-title" style="color:var(--red);">⚠️ Gotcha: Tracking Link Overwrites Original HTML</div>
+    <p><code>trackingLinkProcess()</code> uploads to the SAME GCS path as the original template HTML. After it runs, <code>nonTrackingDownloadUrl</code> and <code>downloadUrl</code> both point to the same tracking-processed file. The original unprocessed HTML is <strong>permanently overwritten</strong>. If <code>startCampaign()</code> runs twice (e.g., from Draft status), tracking links can get double-wrapped.</p>
+  </div>
+
+  <h3>Attachment Pipeline</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Step</th><th>Action</th><th>Details</th></tr></thead>
+      <tbody>
+        <tr><td>Upload</td><td>Frontend → <code>POST /emails/builder/create-attachments-url</code></td><td>Returns GCS signed URL for direct upload</td></tr>
+        <tr><td>Store</td><td>Saved in <code>meta.attachments[]</code></td><td>On EmailBuilder template doc</td></tr>
+        <tr><td>Inherit</td><td>Campaign creation merges template attachments</td><td><code>emailSchedule.meta.attachments</code></td></tr>
+        <tr><td>Send</td><td><code>meta.attachments.map(a => a.downloadUrl)</code></td><td>Passed to Bulk Actions → email-isv → Mailgun</td></tr>
+        <tr><td>Validate</td><td>25 MB limit</td><td>Enforced at both upload time (backend) and send time (email-isv)</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="font-size:13px;color:var(--text-muted);margin-top:8px;">GCS bucket: <code>config.leadgenEmailBuilderStorageBucket</code>. Path: <code>location/{locationId}/templates/{templateId}/{filename}</code> (campaigns use <code>campaigns/{campaignId}</code>).</p>
+</section>
+
+<!-- ════════════════ 13 DEPLOYMENT ════════════════ -->
+<section id="deploy">
+  <h2><span class="icon">🚢</span> 13 — Deployment & CI/CD</h2>
+  <p class="section-desc">All deployments go through Jenkins. Frontend and backend have separate pipelines. Versioned deploys allow testing on isolated staging URLs before merging to the default staging branch.</p>
+
+  <h3>Jenkins Pipelines</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Repo</th><th>Staging Job</th><th>Versioned Job</th><th>Staging Branch</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>ghl-email-builder</strong></td>
+          <td><code>staging/leadgen/email-builder/ghl-email-builder</code></td>
+          <td><code>staging-versions/leadgen/ghl-email-builder</code></td>
+          <td><code>emails-staging</code></td>
+        </tr>
+        <tr>
+          <td><strong>leadgen-marketplace-backend</strong></td>
+          <td><code>staging/leadgen/leadgen-marketplace-backend</code></td>
+          <td><code>staging-versions/leadgen/leadgen-marketplace-backend</code></td>
+          <td><code>staging</code></td>
+        </tr>
+        <tr>
+          <td><strong>spm-ts</strong></td>
+          <td><code>staging/leadgen/spm-ts</code></td>
+          <td><code>staging-versions/leadgen/spm-ts</code></td>
+          <td><code>staging</code></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Frontend Versioned Deploy Chain</h3>
+  <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">The email frontend is a chain of iframes and MFA remotes. To test a versioned deploy end-to-end, ALL layers must be deployed on the same version:</p>
+  <div class="flow-container">
+    <div class="flow-diagram">
+      <div class="flow-row">
+        <div class="flow-box fb-fe">spm-ts (shell)<div class="flow-label">{version}.version.gohighlevel.site</div></div>
+        <div class="flow-arrow">→ iframe →</div>
+        <div class="flow-box fb-fe">email-home<div class="flow-label">{version}.email-home.gohighlevel.site</div></div>
+        <div class="flow-arrow">→ iframe →</div>
+        <div class="flow-box fb-fe">email-builder<div class="flow-label">{version}.email-builder.gohighlevel.site</div></div>
+      </div>
+      <div class="flow-row" style="margin-left:200px;">
+        <div class="flow-box fb-fe" style="opacity:.7">+ email-preview (MF remote)<div class="flow-label">{version}.email-preview.gohighlevel.site</div></div>
+      </div>
+    </div>
+  </div>
+
+  <h4>Versioned Deploy Steps</h4>
+  <ol class="checklist">
+    <li><span class="step">1</span><div>Update <code>builderAppUrl</code> in <code>apps/email-home/src/config/index.ts</code> AND <code>apps/email-preview/src/config/index.ts</code> → versioned email-builder URL</div></li>
+    <li><span class="step">2</span><div>Deploy <code>ghl-email-builder</code> on version — tick all apps (email-builder, email-home, email-preview)</div></li>
+    <li><span class="step">3</span><div>Create spm-ts branch, update <code>emailHomeAppUrl</code> in staging config block (~line 117) → versioned email-home URL</div></li>
+    <li><span class="step">4</span><div>Deploy spm-ts on same version, tick <code>emailPreviewApp=true</code></div></li>
+    <li><span class="step">5</span><div>Test at <code>https://{version}.version.gohighlevel.site</code></div></li>
+  </ol>
+
+  <h3>Backend Deploy</h3>
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-title">API Server</div>
+      <p>Deployed as <code>leadgen-emails</code> K8s deployment. Helm values at <code>apps/emails/deployments/server/</code>.</p>
+    </div>
+    <div class="card">
+      <div class="card-title">Workers (10 independent pods)</div>
+      <p>Each worker is a separate K8s deployment with its own Helm values at <code>apps/emails/deployments/{worker-name}/</code>. Workers can be deployed independently — no need to deploy the API server when changing a worker.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════ 14 SETUP ════════════════ -->
 <section id="setup">
-  <h2><span class="icon">🚀</span> 12 — New Developer Setup</h2>
+  <h2><span class="icon">🚀</span> 14 — New Developer Setup</h2>
   <p class="section-desc">Step-by-step guide to get the email ecosystem running locally for development.</p>
 
   <h3>Prerequisites</h3>
@@ -1847,9 +2171,9 @@
     <div class="card">
       <div class="card-title">System Requirements</div>
       <ul>
-        <li>Node.js 21.7.3 (via Volta or nvm)</li>
+        <li>Node.js 22.21.0 (check <code>.nvmrc</code> — via Volta or nvm)</li>
         <li>Yarn 1.x (classic)</li>
-        <li>Docker (for MongoDB, Redis, ClickHouse locally)</li>
+        <li>Docker (optional — only for local testing; staging DBs are used by default)</li>
         <li>gcloud CLI (authenticated for GCP access)</li>
         <li>VPN access to Istio mesh (for inter-service calls)</li>
       </ul>
@@ -1918,48 +2242,115 @@
   </ol>
 
   <h3>Step 4 — Environment Setup</h3>
-  <ol class="checklist">
-    <li><span class="step">1</span>
-      <div>
-        <strong>Frontend <code>.env</code></strong> — Copy <code>.env.example</code> (if exists) or create <code>.env</code> at repo root with:<br>
-        <code>VITE_CUSTOM_ENV_LOCATION_ID</code>, <code>VITE_CUSTOM_ENV_API_KEY</code>, <code>VITE_CUSTOM_ENV_USER_ID</code>, <code>VITE_CUSTOM_ENV_TEMPLATE_ID</code>, <code>VITE_CUSTOM_ENV_TIME_ZONE</code><br>
-        <em>Get values from a teammate or staging dashboard.</em>
-      </div>
-    </li>
-    <li><span class="step">2</span>
-      <div>
-        <strong>Backend <code>.env</code></strong> — Copy from <code>.env.example</code> or ask a teammate. Key vars: MongoDB connection strings, Redis host, PubSub project, ClickHouse credentials. Use <code>dotenv-safe</code> to validate.
-      </div>
-    </li>
-  </ol>
+
+  <h4>Frontend (<code>ghl-email-builder/.env</code>)</h4>
+  <p style="font-size:13px;color:var(--text-muted);margin-bottom:8px;">Create <code>.env</code> at repo root. Get values from a teammate or the staging dashboard (location settings → API key).</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Variable</th><th>Example</th><th>How to Get</th></tr></thead>
+      <tbody>
+        <tr><td><code>VITE_CUSTOM_ENV_LOCATION_ID</code></td><td><code>o6241QsiRwUIJHyjuhos</code></td><td>From staging sub-account URL or settings</td></tr>
+        <tr><td><code>VITE_CUSTOM_ENV_API_KEY</code></td><td><code>6bb010aa-0ece-4500-...</code></td><td>Settings → Business Profile → API Key in staging</td></tr>
+        <tr><td><code>VITE_CUSTOM_ENV_USER_ID</code></td><td><code>zshNjFrOlVOzfH1NSH2c</code></td><td>From staging user settings or team</td></tr>
+        <tr><td><code>VITE_CUSTOM_ENV_TEMPLATE_ID</code></td><td><code>4st2ALpsQyoX93qSICNB</code></td><td>Any email template ID from staging (for builder dev)</td></tr>
+        <tr><td><code>VITE_CUSTOM_ENV_TIME_ZONE</code></td><td><code>Asia/Calcutta</code></td><td>Your local timezone</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h4>Backend (<code>leadgen-marketplace-backend/.env</code>)</h4>
+  <p style="font-size:13px;color:var(--text-muted);margin-bottom:8px;">Copy from a teammate — the <code>.env.example</code> is just a stub. The backend needs connections to <strong>all</strong> of these services to run:</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Category</th><th>Variables</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>MongoDB (7 connection strings)</strong></td>
+          <td>
+            <code>MONGO_URL</code> (primary)<br>
+            <code>MONGO_URL_LEADGEN_STANDARD</code><br>
+            <code>MONGO_URL_CRM_STANDARD</code><br>
+            <code>MONGO_URL_CRM_CONVERSATIONS_SHARDED</code><br>
+            <code>MONGO_URL_AUTOMATION_REPORTINGS_STANDARD</code><br>
+            <code>MONGO_URL_PLATFORM_STANDARD</code><br>
+            <code>MONGO_URL_LOGS</code>, <code>MONGO_URL_HIGH_READS</code>, <code>MONGO_URL_FUNNELS</code>
+          </td>
+          <td>All point to staging Atlas cluster. Ask teammate for the connection string.</td>
+        </tr>
+        <tr>
+          <td><strong>ClickHouse (email stats)</strong></td>
+          <td>
+            <code>CLICKHOUSE_LEADGEN_EMAILS_HOST</code><br>
+            <code>CLICKHOUSE_LEADGEN_EMAILS_USER</code><br>
+            <code>CLICKHOUSE_LEADGEN_EMAILS_DATABASE</code><br>
+            <code>CLICKHOUSE_LEADGEN_EMAILS_PASSWORD</code>
+          </td>
+          <td>Staging ClickHouse Cloud instance. Also has <code>CLICKHOUSE_LEADGEN_FUNNELS_*</code> for cross-product stats.</td>
+        </tr>
+        <tr>
+          <td><strong>Redis</strong></td>
+          <td>
+            <code>EMAILS_REDIS_HOST</code><br>
+            <code>IAM_CONFIG_REDIS_HOST</code>
+          </td>
+          <td>Staging Redis IP. No local Redis needed — points to GCP Memorystore in staging VPN.</td>
+        </tr>
+        <tr>
+          <td><strong>GCP / PubSub</strong></td>
+          <td><code>GOOGLE_CLOUD_PROJECT</code></td>
+          <td>Set to <code>highlevel-staging</code>. Requires <code>gcloud auth application-default login</code>.</td>
+        </tr>
+        <tr>
+          <td><strong>Auth</strong></td>
+          <td><code>JWT_SECRET</code>, <code>JWT_EXPIRE_MIN</code></td>
+          <td>Use staging values (e.g., <code>12345</code> / <code>10000</code> for local dev)</td>
+        </tr>
+        <tr>
+          <td><strong>Observability</strong></td>
+          <td><code>ENABLE_TELEMETRY=false</code><br><code>ENABLE_CLICKHOUSE_OBSERVABILITY=true</code></td>
+          <td>Disable OTEL locally to avoid noise</td>
+        </tr>
+        <tr>
+          <td><strong>Local service routing (optional)</strong></td>
+          <td><code>LOCALHOST_STRING</code></td>
+          <td>JSON map to redirect specific Istio calls to local services, e.g.,<br><code>{"countdown-timer-api": "http://localhost:5109"}</code></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card" style="border-color:var(--yellow);margin:12px 0;">
+    <div class="card-title">⚠️ Most Services Use Staging — Redis Can Run Locally</div>
+    <p style="font-size:13px;">You do <strong>NOT</strong> need to run MongoDB or ClickHouse locally — the backend <code>.env</code> points directly to the staging cloud instances. You just need <strong>VPN access</strong> to reach the staging Istio mesh, and <strong>gcloud auth</strong> for PubSub. However, for <code>EMAILS_REDIS_HOST</code> you can run a <strong>local Redis</strong> via Docker (<code>docker run -p 6379:6379 redis</code>) and set <code>EMAILS_REDIS_HOST=127.0.0.1</code> — this avoids VPN dependency for tracking link caching and general email cache operations.</p>
+  </div>
 
   <h3>Step 5 — Run Locally</h3>
   <ol class="checklist">
     <li><span class="step">1</span>
       <div>
-        <strong>Frontend: email-home</strong> (main listings app)<br>
-        <code>cd apps/email-home && yarn dev</code> → runs on <strong>port 3003</strong>
+        <strong>Frontend: All 3 email apps</strong> (email-home, email-builder, email-preview)<br>
+        <code>cd ghl-email-builder && yarn dev</code> — runs from <strong>repo root</strong>, starts all apps in parallel:<br>
+        email-home → <strong>port 3003</strong> · email-builder → <strong>port 3002</strong> · email-preview → Webpack dev server
       </div>
     </li>
     <li><span class="step">2</span>
       <div>
-        <strong>Frontend: email-builder</strong> (editor)<br>
-        <code>cd apps/email-builder && yarn dev</code> → runs on <strong>port 3002</strong>
+        <strong>Parent app: spm-ts</strong> (GHL shell — required for full-stack local dev)<br>
+        <code>cd spm-ts && yarn dev</code><br>
+        In <code>spm-ts</code> development config (~line 60), set:<br>
+        • <code>emailHomeAppUrl</code> → <code>http://localhost:3003</code> (iframe — loads email-home)<br>
+        • In <code>asyncRemoteApps</code>, set <code>emailPreviewApp</code> URL → <code>http://localhost:{port}/remoteEntry.js</code> (Module Federation remote)<br>
+        <em>This wires spm-ts to load your local email apps instead of staging.</em>
       </div>
     </li>
     <li><span class="step">3</span>
       <div>
-        <strong>Frontend: email-preview</strong> (MF remote)<br>
-        <code>cd apps/email-preview && yarn dev</code>
+        <strong>Backend: emails API server</strong><br>
+        <code>cd leadgen-marketplace-backend && yarn start:dev emails</code> → runs on <strong>port 5076</strong><br>
+        Also set <code>override = true</code> in <code>ghl-email-builder/apps/*/src/config/index.ts</code> to point <code>marketPlaceURL</code> → <code>http://localhost:5076</code>
       </div>
     </li>
     <li><span class="step">4</span>
-      <div>
-        <strong>Backend: emails API server</strong><br>
-        <code>cd leadgen-marketplace-backend && yarn start:dev emails</code> → runs on <strong>port 5076</strong>
-      </div>
-    </li>
-    <li><span class="step">5</span>
       <div>
         <strong>Backend: individual worker</strong> (optional)<br>
         <code>yarn start:dev leadgen-emails-trigger-event-worker</code> (replace with any worker name from <code>nest-cli-workers.json</code>)
@@ -2033,10 +2424,81 @@
   </div>
 </section>
 
+<!-- ════════════════ 15 DEBUGGING ════════════════ -->
+<section id="debugging">
+  <h2><span class="icon">🐛</span> 15 — Debugging & Troubleshooting</h2>
+  <p class="section-desc">How to trace issues across the email ecosystem — from campaign creation to email delivery.</p>
+
+  <h3>Tracing a Campaign End-to-End</h3>
+  <ol class="checklist">
+    <li><span class="step">1</span><div><strong>Find the Schedule doc</strong> — Query MongoDB <code>Schedule</code> collection by <code>locationId</code> + <code>_id</code>. Check <code>status</code>, <code>meta.bulkRequestId</code>, <code>downloadUrl</code>.</div></li>
+    <li><span class="step">2</span><div><strong>Check the downloadUrl</strong> — Fetch the HTML from <code>downloadUrl</code>. Are tracking links wrapped? Are Handlebars vars still present (they should be — compilation happens at send time)?</div></li>
+    <li><span class="step">3</span><div><strong>Check Bulk Actions</strong> — Use <code>bulkRequestId</code> to query the Bulk Actions API for status, progress, and error counts.</div></li>
+    <li><span class="step">4</span><div><strong>Check ClickHouse stats</strong> — Query <code>email_builder_stats</code> with <code>sourceId = scheduleId</code>. Look for <code>accepted=1</code> rows (sent), then <code>delivered</code>, <code>opened</code>, <code>clicked</code>, <code>permanentFail</code>, <code>temporaryFail</code>.</div></li>
+    <li><span class="step">5</span><div><strong>Check PubSub workers</strong> — Look at GCP Logging for <code>trigger-event-worker</code>, <code>campaign-stats-worker</code>, <code>campaign-schedule-worker</code> for errors or lag.</div></li>
+  </ol>
+
+  <h3>Auth Context Flow</h3>
+  <div class="card" style="margin-bottom:16px;">
+    <div class="card-title">How auth reaches the email apps</div>
+    <p>spm-ts (the GHL shell) holds the auth context (<code>__hl_token</code>, <code>__hl_meta</code> cookies). When it loads email-home as an iframe, it passes <code>userId</code>, <code>apiKey</code>, <code>tokenId</code>, <code>locationId</code> via URL params and Postmate handshake. email-home stores these in Vuex and passes them to every API call via axios headers. email-builder receives context from email-home via a second Postmate handshake (iframe inside iframe).</p>
+  </div>
+
+  <h3>Common Debug Scenarios</h3>
+  <div class="card-grid">
+    <div class="card" style="border-color:var(--yellow)">
+      <div class="card-title">⚠️ "Email looks wrong" / Broken template</div>
+      <p>Check: (1) Was <code>trackingLinkProcess()</code> run twice? Look at <code>nonTrackingDownloadUrl</code> vs <code>downloadUrl</code>. (2) Did Handlebars get mangled? Download the HTML from <code>downloadUrl</code> and inspect for broken <code>{{...}}</code> syntax. (3) Were custom values resolved too early? <code>{{custom_values.*}}</code> should be resolved at tracking time, <code>{{contact.*}}</code> at send time.</p>
+    </div>
+    <div class="card" style="border-color:var(--yellow)">
+      <div class="card-title">⚠️ Campaign stuck in "Processing"</div>
+      <p>Check: (1) <code>campaign-schedule-worker</code> logs — it processes bulk completion CDC. (2) Is the bulk request actually complete? Query Bulk Actions API. (3) <code>status</code> field on Schedule doc — worker updates this on completion.</p>
+    </div>
+    <div class="card" style="border-color:var(--yellow)">
+      <div class="card-title">⚠️ Stats not showing / Zero stats</div>
+      <p>Check: (1) Are <code>accepted=1</code> rows in ClickHouse? Without them, no query returns results. (2) Is <code>campaign-stats-worker</code> consuming from <code>reporting-stats-events</code>? Check for lag or errors. (3) Is the <code>sourceType</code> correct for the query? See source type routing table above.</p>
+    </div>
+    <div class="card" style="border-color:var(--yellow)">
+      <div class="card-title">⚠️ Sequence emails not sending</div>
+      <p>Check: (1) Cloud Tasks — is the task created? Check <code>sequence.service</code> logs. (2) Did the task fire? Check <code>sequence-action.service</code> logs. (3) <code>CONVERSATIONS_MESSAGES_INTERNAL_API</code> response — 4xx means payload issue, 5xx means conversations service is down. (4) <code>SequenceExecution</code> doc — check status per contact.</p>
+    </div>
+    <div class="card" style="border-color:var(--yellow)">
+      <div class="card-title">⚠️ Workflow email sends "[object Object]"</div>
+      <p>This is a known issue with bare merge tags. <code>{{first_name}}</code> (no <code>contact.</code> prefix) hits the unknown-variable path in <code>TemplateCompiler</code> and renders as <code>[object Object]</code>. The fix is to always use <code>{{contact.first_name}}</code>. See <code>automation-workflows-backend/src/compiler/index.ts</code>.</p>
+    </div>
+    <div class="card" style="border-color:var(--yellow)">
+      <div class="card-title">⚠️ Builder iframe blank</div>
+      <p>Check: (1) Both email-home (port 3003) and email-builder (port 3002) must be running. (2) Postmate handshake — check console for Postmate errors. (3) CORS — local dev needs matching origins.</p>
+    </div>
+  </div>
+
+  <h3>Testing</h3>
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-title">Backend Tests (Jest)</div>
+      <p>Run: <code>cd leadgen-marketplace-backend && yarn test apps/emails</code>. Tests live in <code>apps/emails/test/</code>. Use <code>--runInBand</code> if hitting memory issues.</p>
+    </div>
+    <div class="card">
+      <div class="card-title">Frontend Tests (Vitest)</div>
+      <p>Run: <code>cd ghl-email-builder && yarn test</code> in the specific app directory. Canvas-dependent tests may need correct Node version (<code>nvm use</code>) and <code>npm rebuild canvas</code>.</p>
+    </div>
+    <div class="card">
+      <div class="card-title">E2E Tests</div>
+      <p>In <code>leadgen-tests</code> repo. Uses Cypress for full end-to-end flows against staging. Requires staging credentials and VPN access.</p>
+    </div>
+  </div>
+
+  <h3>Key Config Gotcha</h3>
+  <div class="card" style="border-color:var(--red)">
+    <div class="card-title" style="color:var(--red);">⚠️ paramWhiteList: true strips undecorated DTO properties SILENTLY</div>
+    <p>The emails app NestJS bootstrap has <code>paramWhiteList: true</code> and <code>paramForbidNonWhiteList: false</code>. This means any request body properties NOT decorated with class-validator decorators in the DTO are <strong>silently stripped</strong> — no error, no warning. If you add a new field to an endpoint but forget to add it to the DTO with a decorator, it will be undefined in your service. This is a common source of "but I'm sending it in the request" bugs.</p>
+  </div>
+</section>
+
 <!-- ════════════════ FOOTER ════════════════ -->
 <section style="text-align:center; padding:48px 0; border-top:1px solid var(--border);">
   <p style="color:var(--text-muted);font-size:13px;">
-    Generated on <strong>April 6, 2026</strong> — GHL Email Ecosystem Architecture Guide<br>
+    Generated on <strong>April 6, 2026</strong> · Updated <strong>April 7, 2026</strong> — GHL Email Ecosystem Architecture Guide<br>
     Repos: <code>ghl-email-builder</code> · <code>leadgen-marketplace-backend</code><br>
     <span style="opacity:.5;">For internal use only</span>
   </p>

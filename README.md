@@ -21,9 +21,12 @@ Hosted on Vercel free tier. Auto-deploys on every push to `main`.
 | PubSub Topic Map | 13 topics with publishers, subscribers, message types |
 | Data Layer | 20+ MongoDB collections, ClickHouse tables, Redis, GCS |
 | Flow Diagrams (8) | SVG service-level diagrams for broadcast campaign, sequence, AB test, template save, unsubscribe, workflow integration, stats export, tracking links |
-| External Service Map | 17 services called via Istio mesh |
+| External Service Map | 19 services called via Istio mesh |
 | Environment & Config | Backend + frontend env vars, key config files |
+| Pre-Send Pipeline | Full MJML→HTML→UTM→tracking links→upload chain, protect/restore pattern, attachment pipeline |
+| Deployment & CI/CD | Jenkins pipelines, staging branches, versioned deploy chain, frontend deploy steps |
 | Developer Setup | Step-by-step onboarding: clone, auth, install, run, verify, common gotchas |
+| Debugging Guide | End-to-end campaign tracing, auth context flow, common debug scenarios, testing, DTO gotcha |
 
 ## Flow Diagrams
 
@@ -37,6 +40,7 @@ The doc includes 8 interactive SVG diagrams showing cross-service data flow:
 6. **Workflow Integration** — Two-stage pipeline (integration worker → precompute worker)
 7. **Stats Export** — Async job: PubSub → worker → ClickHouse/Mongo → CSV to GCS
 8. **Tracking Link Lifecycle** — Click redirect → PubSub → ClickHouse event log
+9. **Pre-Send Template Pipeline** — MJML → HTML → UTM → tracking links → upload → per-recipient compilation
 
 ## Updating
 
