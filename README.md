@@ -48,21 +48,3 @@ vim index.html
 git add -A && git commit -m "update docs" && git push
 ```
 
-## Repo Setup Notes
-
-This repo uses a personal GitHub account (`kumar8317`) with a dedicated SSH key, separate from the company GitHub (`kumar-ankit-dev`).
-
-| Account | SSH Host | Key |
-|---------|----------|-----|
-| Company (`kumar-ankit-dev`) | `github.com` (default) | `~/.ssh/id_ed25519` |
-| Personal (`kumar8317`) | `github.com-personal` | `~/.ssh/id_ed25519_personal` |
-
-The git remote for this repo uses the `github.com-personal` host alias, so pushes route through the personal key automatically. All other repos continue using the company key by default.
-
-To switch `gh` CLI for personal operations:
-
-```bash
-gh auth switch --user kumar8317     # switch to personal
-# ... do personal stuff ...
-gh auth switch --user kumar-ankit-dev  # switch back to company
-```
