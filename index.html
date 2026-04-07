@@ -2352,17 +2352,17 @@
   <ol class="checklist">
     <li><span class="step">✓</span>
       <div>
-        <strong>Frontend:</strong> Open <code>http://localhost:3003/location/{locationId}/marketing/emails</code> — you should see the template list. The builder iframe will load from port 3002.
+        <strong>Full stack (recommended):</strong> Open <code>http://localhost:8080</code> (spm-ts) → navigate to a sub-account → <strong>Marketing → Emails</strong>. The campaign listing page is an iframe of email-home (port 3003). From there you can create a campaign, which opens the email-builder iframe (port 3002). This is the real user flow.
       </div>
     </li>
     <li><span class="step">✓</span>
       <div>
-        <strong>Backend:</strong> Hit <code>http://localhost:5076/emails/builder/all</code> with auth headers — you should get a template list response.
+        <strong>Frontend only (without spm-ts):</strong> Open <code>http://localhost:3003/location/{locationId}/marketing/emails</code> directly — you'll see the template list, but auth context won't be passed via Postmate (some features may not work without spm-ts).
       </div>
     </li>
     <li><span class="step">✓</span>
       <div>
-        <strong>Full stack:</strong> For end-to-end testing through the GHL shell, you may need <code>spm-ts</code> running to provide the auth context and Postmate handshake. Ask the team for the local spm-ts setup guide.
+        <strong>Backend only:</strong> Hit <code>http://localhost:5076/emails/builder/all</code> with auth headers — you should get a template list response.
       </div>
     </li>
   </ol>
