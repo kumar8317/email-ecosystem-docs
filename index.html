@@ -2205,12 +2205,12 @@
   <ol class="checklist">
     <li><span class="step">1</span>
       <div>
-        <strong>Get your npm token</strong> from the team (or generate via npm login to the private registry). If you see 401/403 errors during install, the <code>platform-core-ar-login</code> skill can help troubleshoot.
+        <strong>Run <code>yarn ar-login</code></strong> from the repo root (both frontend and backend repos have this script). It executes <code>ar-login.sh</code> which automatically configures your <code>.npmrc</code> with the correct scoped registry tokens for <code>@platform-ui</code>, <code>@frontend-core</code>, <code>@gohighlevel</code>, <code>@ghl-plugins</code>, <code>@platform-core</code>. This is the easiest way for first-time setup.
       </div>
     </li>
     <li><span class="step">2</span>
       <div>
-        <strong>Configure <code>.npmrc</code></strong> in your home directory with the scoped registry tokens for <code>@platform-ui</code>, <code>@frontend-core</code>, <code>@gohighlevel</code>, <code>@ghl-plugins</code>, <code>@platform-core</code>.
+        <strong>If <code>yarn ar-login</code> fails</strong>, you can manually configure <code>~/.npmrc</code> with scoped registry tokens from a teammate. If you see 401/403 errors during install, re-run <code>yarn ar-login</code> — tokens expire periodically.
       </div>
     </li>
   </ol>
