@@ -2087,6 +2087,36 @@
   <h2><span class="icon">🏗️</span> 13 — Infrastructure Overview</h2>
   <p class="section-desc">High-level view of the GCP infrastructure powering the email ecosystem — how frontend and backend are hosted, which GCP services are used, and how environments are organized.</p>
 
+
+  <h3>GCP Projects &amp; Clusters</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Environment</th><th>GCP Project</th><th>Server Cluster</th><th>Worker Cluster</th><th>Namespace</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Staging</strong></td>
+          <td><code>highlevel-staging</code></td>
+          <td><code>servers-3-us-central1-staging-cluster</code></td>
+          <td><code>workers-us-central-staging</code></td>
+          <td><code>staging</code></td>
+        </tr>
+        <tr>
+          <td><strong>Production</strong></td>
+          <td><code>highlevel-backend</code></td>
+          <td><code>servers-us-central-production-cluster</code> (446 nodes)</td>
+          <td><code>workers-us-central-production-cluster</code> (342 nodes)</td>
+          <td><code>default</code></td>
+        </tr>
+        <tr>
+          <td><strong>Beta</strong></td>
+          <td><code>highlevel-backend</code></td>
+          <td colspan="2"><code>beta-us-central1-cluster</code> (7 nodes)</td>
+          <td><code>default</code></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="font-size:13px;color:var(--text-muted);margin-top:8px;">All clusters run in <strong>us-central1</strong>. API servers and workers run on separate clusters for isolation. Access via <code>gcloud container clusters get-credentials &lt;cluster-name&gt; --region us-central1 --project &lt;project&gt;</code>.</p>
   <h3>GCP Services Used</h3>
   <div class="table-wrap">
     <table>
@@ -2212,6 +2242,43 @@
   </div>
   <p style="font-size:13px;color:var(--text-muted);margin-top:8px;">Each worker also has a DLQ (Dead Letter Queue) deployment in production for failed message reprocessing.</p>
 
+  <h4>Additional Workers (not in Helm values, deployed separately)</h4>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Deployment Name</th><th>Prod Pods</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td><code>leadgen-emails-tracking-link-worker</code></td><td>4</td><td>Click tracking link processing</td></tr>
+        <tr><td><code>leadgen-emails-countdown-timer-worker</code></td><td>4</td><td>Countdown timer image generation</td></tr>
+        <tr><td><code>leadgen-emails-email-ai-event-worker</code></td><td>8</td><td>AI-powered email suggestions</td></tr>
+        <tr><td><code>leadgen-emails-chat-widget-biz-niche-event-worker</code></td><td>5</td><td>Chat widget business niche events</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h4>Email-ISV &amp; Delivery Workers (separate repos)</h4>
+  <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">These workers handle actual email delivery via Mailgun/SES and run from different repos (<code>email-isv</code>, <code>lc-email</code>). Listed here for complete infrastructure context.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Deployment Name</th><th>Role</th></tr></thead>
+      <tbody>
+        <tr><td><code>email-isv-api</code></td><td>Email sending API — integrates with Mailgun</td></tr>
+        <tr><td><code>email-isv-webhook-api</code></td><td>Webhook receiver for Mailgun delivery events</td></tr>
+        <tr><td><code>email-isv-worker</code></td><td>Async email delivery processing</td></tr>
+        <tr><td><code>lc-email-smtp-deliver-worker</code></td><td>SMTP delivery pipeline</td></tr>
+        <tr><td><code>lc-email-bulk-deliver-worker</code></td><td>Bulk campaign delivery</td></tr>
+        <tr><td><code>lc-email-workflow-deliver-worker</code></td><td>Workflow-triggered email delivery</td></tr>
+        <tr><td><code>lc-email-notification-deliver-worker</code></td><td>System notification emails</td></tr>
+        <tr><td><code>lc-email-mailgun-deliver-worker</code></td><td>Mailgun-specific delivery pipeline</td></tr>
+        <tr><td><code>lc-email-inbound-worker</code></td><td>Inbound email processing</td></tr>
+        <tr><td><code>lc-email-billing-request-worker</code></td><td>Email billing and metering</td></tr>
+        <tr><td><code>email-webhook-worker</code></td><td>Email event webhooks</td></tr>
+        <tr><td><code>bulk-email-webhook-worker</code></td><td>Bulk email event webhooks</td></tr>
+        <tr><td><code>conversations-email-unsubscribe-worker</code></td><td>Unsubscribe event processing</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="font-size:13px;color:var(--text-muted);margin-top:8px;">Total email-related deployments across all clusters: <strong>~45+</strong> (including DLQ and blue/green slots).</p>
+
   <h3>Kubernetes Namespace &amp; Service Accounts</h3>
   <div class="table-wrap">
     <table>
@@ -2328,6 +2395,31 @@
     └── values.server.beta.yaml             # Beta API server</pre>
   </div>
   <p style="font-size:13px;color:var(--text-muted);margin-top:8px;"><strong>Key fields in Helm values:</strong> <code>type</code> (multiserver | pubsub), <code>DeploymentName</code>, <code>autoscaling</code> (min/max/target), <code>resources</code> (CPU/mem requests), <code>sidecars</code> (Istio mesh allowlist), <code>envConfigsSecrets</code> (K8s secret refs), <code>serviceAccountName</code>.</p>
+
+  <h3>Monitoring &amp; Observability</h3>
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-title">Grafana — Leadgen Master Dashboard</div>
+      <p>Primary monitoring dashboard for all email services. Filter by <code>subTeam=emails</code> to see email-specific metrics.</p>
+      <p style="font-size:12px;color:var(--text-muted);margin-top:6px;">Staging: <code>staging.grafana.leadconnectorhq.com</code><br>Production: <code>prod.grafana.leadconnectorhq.com</code><br>Dashboard UID: <code>df6jr840cjv28a</code> &mdash; Panels: CPU/Pod, Memory/Pod, Pod Count, Restarts, Istio Stats, API Stats, PubSub, Cloud Tasks</p>
+    </div>
+    <div class="card">
+      <div class="card-title">Cloud Logging</div>
+      <p>All pods emit structured JSON logs. Use GCP Cloud Logging console to filter by <code>resource.labels.container_name</code> (e.g., <code>leadgen-emails-campaign-stats-worker</code>) and <code>resource.labels.namespace_name</code> (<code>default</code> for prod).</p>
+    </div>
+  </div>
+
+  <h3>Traffic Routing</h3>
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-title">Production (External Traffic)</div>
+      <p>API servers expose <code>NodePort</code> services with <code>backendConfig: true</code> and 300s timeout. GCP HTTP(S) Load Balancer routes external traffic to the NodePort. Istio Ingress Gateway handles L7 routing with LEAST_CONNECTION balancing.</p>
+    </div>
+    <div class="card">
+      <div class="card-title">Staging (Internal Only)</div>
+      <p>API servers use <code>clusterIP: None</code> (headless service). Only accessible within the cluster or via VPN. Requires <strong>Pritunl VPN</strong> for access to Jenkins, Grafana, Redis, MongoDB, and staging services.</p>
+    </div>
+  </div>
 </section>
 
 <!-- ════════════════ 14 DEPLOYMENT ════════════════ -->
