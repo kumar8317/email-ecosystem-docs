@@ -222,6 +222,7 @@
   <a href="#services">Service Map</a>
   <a href="#env">Environment</a>
   <a href="#pipeline">Send Pipeline</a>
+  <a href="#infra">Infrastructure</a>
   <a href="#deploy">Deployment</a>
   <a href="#setup">Dev Setup</a>
   <a href="#debugging">Debugging</a>
@@ -259,9 +260,10 @@
     <a href="#services"><span class="num">10</span> External Service Map</a>
     <a href="#env"><span class="num">11</span> Environment & Config</a>
     <a href="#pipeline"><span class="num">12</span> Pre-Send Template Pipeline</a>
-    <a href="#deploy"><span class="num">13</span> Deployment & CI/CD</a>
-    <a href="#setup"><span class="num">14</span> New Developer Setup</a>
-    <a href="#debugging"><span class="num">15</span> Debugging & Troubleshooting</a>
+    <a href="#infra"><span class="num">13</span> Infrastructure Overview</a>
+    <a href="#deploy"><span class="num">14</span> Deployment & CI/CD</a>
+    <a href="#setup"><span class="num">15</span> New Developer Setup</a>
+    <a href="#debugging"><span class="num">16</span> Debugging & Troubleshooting</a>
   </div>
 </section>
 
@@ -2080,9 +2082,257 @@
   <p style="font-size:13px;color:var(--text-muted);margin-top:8px;">GCS bucket: <code>config.leadgenEmailBuilderStorageBucket</code>. Path: <code>location/{locationId}/templates/{templateId}/{filename}</code> (campaigns use <code>campaigns/{campaignId}</code>).</p>
 </section>
 
-<!-- ════════════════ 13 DEPLOYMENT ════════════════ -->
+<!-- ════════════════ 13 INFRASTRUCTURE OVERVIEW ════════════════ -->
+<section id="infra">
+  <h2><span class="icon">🏗️</span> 13 — Infrastructure Overview</h2>
+  <p class="section-desc">High-level view of the GCP infrastructure powering the email ecosystem — how frontend and backend are hosted, which GCP services are used, and how environments are organized.</p>
+
+  <h3>GCP Services Used</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Service</th><th>Purpose</th><th>Details</th></tr></thead>
+      <tbody>
+        <tr><td><strong>GKE (Kubernetes Engine)</strong></td><td>Backend hosting</td><td>API servers + workers run as K8s Deployments with HPA autoscaling. Helm values define resource requests, replicas, and sidecar config.</td></tr>
+        <tr><td><strong>GCS (Cloud Storage)</strong></td><td>Frontend static assets + email templates</td><td>Iframe apps (email-builder, email-home) deployed to GCS buckets behind CDN. MF remotes served via <code>appcdn.leadconnectorhq.com</code> (also GCS). Email templates stored at <code>location/{locationId}/templates/{templateId}/</code>.</td></tr>
+        <tr><td><strong>Cloud PubSub</strong></td><td>Async message bus</td><td>13+ topics for campaign triggers, stats, snapshots, integrations, exports. Each worker subscribes to a dedicated subscription.</td></tr>
+        <tr><td><strong>Cloud Tasks</strong></td><td>Delayed execution</td><td>Used for sequence drip campaigns — schedules future email sends at precise intervals.</td></tr>
+        <tr><td><strong>Memorystore (Redis)</strong></td><td>Caching &amp; rate limiting</td><td>Dedicated Redis instances per environment. Staging: <code>10.237.103.212</code> (emails), <code>10.68.81.52</code> (marketplace). Production: <code>10.109.67.100</code> (emails), <code>10.109.65.84</code> (marketplace).</td></tr>
+        <tr><td><strong>Secret Manager</strong></td><td>Credentials storage</td><td>MongoDB URLs, ClickHouse creds, OpenAI API key, Pexels API key. Referenced via <code>secretKeyRef</code> in Helm values.</td></tr>
+        <tr><td><strong>Cloud Logging</strong></td><td>Observability</td><td>Structured JSON logs from all pods. Filter by <code>resource.labels.container_name</code> to find specific workers.</td></tr>
+        <tr><td><strong>Istio Service Mesh</strong></td><td>Inter-service networking</td><td>All pod-to-pod HTTP calls go through Istio sidecar proxies. Sidecars must be declared in Helm values.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Frontend Hosting Architecture</h3>
+  <p class="section-desc">Email frontend apps use two deployment methods: <strong>iframe apps</strong> (GCS buckets) and <strong>Module Federation remotes</strong> (appcdn GCS buckets behind CDN).</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>App</th><th>Type</th><th>Hosting</th><th>Staging Bucket</th><th>Production Bucket</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>email-builder</strong></td>
+          <td>iframe</td>
+          <td>GCS &rarr; CDN</td>
+          <td><code>leadgen-emails-builder-staging</code></td>
+          <td><code>leadgen-emails-builder-production</code></td>
+        </tr>
+        <tr>
+          <td><strong>email-home</strong></td>
+          <td>iframe</td>
+          <td>GCS &rarr; CDN</td>
+          <td><code>leadgen-emails-home-staging</code></td>
+          <td><code>leadgen-emails-home-production</code></td>
+        </tr>
+        <tr>
+          <td><strong>email-preview</strong></td>
+          <td>Module Federation</td>
+          <td>appcdn GCS &rarr; CDN</td>
+          <td colspan="2"><code>{env}.appcdn.leadconnectorhq.com/leadgen/email-preview/remoteEntry.js</code></td>
+        </tr>
+        <tr>
+          <td><strong>default-emails</strong></td>
+          <td>Module Federation</td>
+          <td>appcdn GCS &rarr; CDN</td>
+          <td colspan="2"><code>{env}.appcdn.leadconnectorhq.com/leadgen/default-emails/remoteEntry.js</code></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-title">Iframe Apps (email-builder, email-home)</div>
+      <p>Built as standalone Vue apps. Jenkins runs <code>deployFrontendApp</code> shared library which builds the app, uploads to the GCS bucket, and invalidates cache. Cache policy: <code>max-age=31536000, immutable, public</code>. Versioned deploys use <code>{version}.email-builder.gohighlevel.site</code> pattern.</p>
+    </div>
+    <div class="card">
+      <div class="card-title">Module Federation Remotes (email-preview, default-emails)</div>
+      <p>Built as MF remote entries. Jenkins uploads <code>remoteEntry.js</code> + chunks to appcdn GCS bucket under <code>leadgen/{appName}/</code>. The spm-ts shell loads these remotes dynamically at runtime. CDN URL pattern: <code>{env}.appcdn.leadconnectorhq.com</code>.</p>
+    </div>
+  </div>
+
+  <h4>Frontend URL Map</h4>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Environment</th><th>email-builder</th><th>email-home</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Development</strong></td><td><code>hl-email-builder.web.app</code></td><td><code>hl-email-home-staging.leadconnectorhq.com</code></td></tr>
+        <tr><td><strong>Staging</strong></td><td><code>hl-email-builder.web.app</code></td><td><code>default-cv.email-home.gohighlevel.site</code></td></tr>
+        <tr><td><strong>Interop</strong></td><td><code>hl-email-builder.web.app</code></td><td><code>leadgen-emails-home-interop.leadconnectorhq.com</code></td></tr>
+        <tr><td><strong>Beta</strong></td><td><code>email-builder-beta.web.app</code></td><td><code>email-home-beta.leadconnectorhq.com</code></td></tr>
+        <tr><td><strong>Production</strong></td><td><code>email-builder-prod.web.app</code></td><td><code>email-home-prod.leadconnectorhq.com</code></td></tr>
+        <tr><td><strong>Versioned</strong></td><td><code>{ver}.email-builder.gohighlevel.site</code></td><td><code>{ver}.email-home.gohighlevel.site</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Backend Hosting Architecture</h3>
+  <p class="section-desc">The backend runs on GKE as Kubernetes Deployments. There are two types: <strong>multiserver</strong> (HTTP API servers) and <strong>pubsub</strong> (PubSub workers). All config lives in <code>apps/emails/deployments/{environment}/</code>.</p>
+
+  <h4>API Servers (multiserver type)</h4>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Deployment</th><th>Role</th><th>Staging Replicas</th><th>Production Replicas</th><th>Resources (Prod)</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>emails</code></td>
+          <td>Main API server — handles all email CRUD, campaign management, template operations</td>
+          <td>1 (fixed)</td>
+          <td>10–25 (HPA 60% CPU / 65% mem)</td>
+          <td>1536Mi mem, 1200m CPU</td>
+        </tr>
+        <tr>
+          <td><code>emails-builder-workflows</code></td>
+          <td>Builder workflow endpoints — separated for independent scaling</td>
+          <td>1 (fixed)</td>
+          <td>10–25 (HPA 60% CPU / 65% mem)</td>
+          <td>1536Mi mem, 1200m CPU</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h4>PubSub Workers (pubsub type)</h4>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Deployment Name</th><th>Subscription</th><th>Prod Replicas</th><th>Resources</th></tr></thead>
+      <tbody>
+        <tr><td><code>leadgen-emails-trigger-event</code></td><td><code>leadgen-emails-campaign-trigger-events-sub</code></td><td>2–10</td><td>512Mi / 500m</td></tr>
+        <tr><td><code>leadgen-emails-campaign-stats</code></td><td><code>leadgen-emails-campaign-stats-sub</code></td><td>2–10</td><td>512Mi / 500m</td></tr>
+        <tr><td><code>leadgen-emails-campaign-integration</code></td><td><code>leadgen-emails-campaign-integration-sub</code></td><td>1–3</td><td>512Mi / 500m</td></tr>
+        <tr><td><code>leadgen-emails-action-precompute</code></td><td><code>leadgen-emails-action-precompute-sub</code></td><td>2–15</td><td>1024Mi / 1000m</td></tr>
+        <tr><td><code>leadgen-emails-campaign-schedule</code></td><td><code>leadgen-emails-campaign-schedule-sub</code></td><td>1–5</td><td>512Mi / 500m</td></tr>
+        <tr><td><code>leadgen-emails-snapshot</code></td><td><code>leadgen-emails-snapshot-sub</code></td><td>2–10</td><td>1024Mi / 1000m</td></tr>
+        <tr><td><code>leadgen-emails-stats-export</code></td><td><code>leadgen-emails-stats-export-sub</code></td><td>1–5</td><td>1024Mi / 1000m</td></tr>
+        <tr><td><code>leadgen-emails-sequences-trigger-action</code></td><td><code>leadgen-emails-sequences-trigger-action-sub</code></td><td>2–10</td><td>512Mi / 500m</td></tr>
+        <tr><td><code>leadgen-emails-product-stats</code></td><td><code>leadgen-emails-product-stats-sub</code></td><td>2–10</td><td>512Mi / 500m</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="font-size:13px;color:var(--text-muted);margin-top:8px;">Each worker also has a DLQ (Dead Letter Queue) deployment in production for failed message reprocessing.</p>
+
+  <h3>Kubernetes Namespace &amp; Service Accounts</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Environment</th><th>Namespace</th><th>Service Account</th><th>Istio Sidecar Pattern</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Staging</strong></td><td><code>staging</code></td><td><code>staging-leadgen-emails</code></td><td><code>staging/{service}-api-service.staging.svc.cluster.local</code></td></tr>
+        <tr><td><strong>Production</strong></td><td><code>default</code></td><td><code>default-leadgen-emails</code></td><td><code>default/{service}-api-service.default.svc.cluster.local</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Data Stores</h3>
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-title">MongoDB</div>
+      <p>Primary data store. 3 connection strings: <code>MONGO_URL</code> (main), <code>MONGO_URL_LEADGEN_STANDARD</code> (read replicas), <code>MONGO_URL_LEADGEN_PAYMENTS_STANDARD</code>. Secrets stored in <code>mongo-highlevel-{staging|prod}</code> K8s secrets.</p>
+    </div>
+    <div class="card">
+      <div class="card-title">ClickHouse</div>
+      <p>Analytics &amp; stats storage. Email campaign events, product stats, tracking data. Creds in <code>clickhouse-credentials</code> K8s secret. Two clusters: funnels (shared) and emails-specific (<code>leadgen-emails-clickhouse-creds</code>).</p>
+    </div>
+    <div class="card">
+      <div class="card-title">Redis (Memorystore)</div>
+      <p>Two dedicated instances per environment — one for marketplace (shared) and one for emails (dedicated). Used for caching, rate limiting, and deduplication.</p>
+    </div>
+    <div class="card">
+      <div class="card-title">GCS (Cloud Storage)</div>
+      <p>Email template HTML/images stored in location-scoped paths. Bucket name from <code>config.leadgenEmailBuilderStorageBucket</code>. Also used for stats export CSV files.</p>
+    </div>
+  </div>
+
+  <h3>Architecture Diagram</h3>
+  <svg viewBox="0 0 900 520" style="width:100%;max-width:900px;margin:20px auto;display:block;background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);">
+    <!-- Browser Layer -->
+    <rect x="20" y="15" width="860" height="65" rx="8" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="6,3"/>
+    <text x="40" y="38" font-size="11" fill="var(--accent)" font-weight="700">BROWSER</text>
+    <rect x="60" y="42" width="130" height="28" rx="5" fill="var(--accent)" fill-opacity=".15" stroke="var(--accent)" stroke-width="1"/>
+    <text x="125" y="60" font-size="10" fill="var(--text)" text-anchor="middle">spm-ts (shell)</text>
+    <text x="210" y="60" font-size="14" fill="var(--text-muted)">&rarr;</text>
+    <rect x="230" y="42" width="130" height="28" rx="5" fill="var(--green)" fill-opacity=".15" stroke="var(--green)" stroke-width="1"/>
+    <text x="295" y="60" font-size="10" fill="var(--text)" text-anchor="middle">email-home (iframe)</text>
+    <text x="380" y="60" font-size="14" fill="var(--text-muted)">&rarr;</text>
+    <rect x="400" y="42" width="150" height="28" rx="5" fill="var(--green)" fill-opacity=".15" stroke="var(--green)" stroke-width="1"/>
+    <text x="475" y="60" font-size="10" fill="var(--text)" text-anchor="middle">email-builder (iframe)</text>
+    <rect x="580" y="42" width="130" height="28" rx="5" fill="var(--cyan)" fill-opacity=".15" stroke="var(--cyan)" stroke-width="1"/>
+    <text x="645" y="60" font-size="10" fill="var(--text)" text-anchor="middle">email-preview (MF)</text>
+    <rect x="730" y="42" width="130" height="28" rx="5" fill="var(--cyan)" fill-opacity=".15" stroke="var(--cyan)" stroke-width="1"/>
+    <text x="795" y="60" font-size="10" fill="var(--text)" text-anchor="middle">default-emails (MF)</text>
+    <!-- CDN Layer -->
+    <rect x="20" y="100" width="860" height="50" rx="8" fill="none" stroke="var(--yellow)" stroke-width="1.5" stroke-dasharray="6,3"/>
+    <text x="40" y="120" font-size="11" fill="var(--yellow)" font-weight="700">GCS + CDN</text>
+    <rect x="230" y="112" width="180" height="28" rx="5" fill="var(--yellow)" fill-opacity=".1" stroke="var(--yellow)" stroke-width="1"/>
+    <text x="320" y="130" font-size="9" fill="var(--text)" text-anchor="middle">GCS buckets (iframe apps)</text>
+    <rect x="500" y="112" width="250" height="28" rx="5" fill="var(--yellow)" fill-opacity=".1" stroke="var(--yellow)" stroke-width="1"/>
+    <text x="625" y="130" font-size="9" fill="var(--text)" text-anchor="middle">appcdn.leadconnectorhq.com (MF remotes)</text>
+    <!-- GKE Layer -->
+    <rect x="20" y="170" width="860" height="170" rx="8" fill="none" stroke="var(--accent2)" stroke-width="1.5" stroke-dasharray="6,3"/>
+    <text x="40" y="192" font-size="11" fill="var(--accent2)" font-weight="700">GKE CLUSTER (Kubernetes + Istio)</text>
+    <rect x="50" y="200" width="200" height="55" rx="5" fill="var(--accent2)" fill-opacity=".12" stroke="var(--accent2)" stroke-width="1"/>
+    <text x="150" y="218" font-size="10" fill="var(--text)" text-anchor="middle" font-weight="600">emails (API server)</text>
+    <text x="150" y="245" font-size="9" fill="var(--text-muted)" text-anchor="middle">10-25 replicas (prod)</text>
+    <rect x="270" y="200" width="200" height="55" rx="5" fill="var(--accent2)" fill-opacity=".12" stroke="var(--accent2)" stroke-width="1"/>
+    <text x="370" y="218" font-size="10" fill="var(--text)" text-anchor="middle" font-weight="600">emails-builder-workflows</text>
+    <text x="370" y="245" font-size="9" fill="var(--text-muted)" text-anchor="middle">10-25 replicas (prod)</text>
+    <rect x="50" y="270" width="820" height="60" rx="5" fill="var(--green)" fill-opacity=".08" stroke="var(--green)" stroke-width="1"/>
+    <text x="70" y="290" font-size="10" fill="var(--green)" font-weight="600">PubSub Workers (9 independent deployments)</text>
+    <text x="70" y="318" font-size="9" fill="var(--text-muted)">trigger-event | campaign-stats | campaign-integration | action-precompute | campaign-schedule | snapshot | stats-export | sequences-trigger | product-stats</text>
+    <rect x="520" y="200" width="120" height="30" rx="5" fill="var(--pink)" fill-opacity=".12" stroke="var(--pink)" stroke-width="1"/>
+    <text x="580" y="220" font-size="10" fill="var(--pink)" text-anchor="middle">Istio Mesh</text>
+    <rect x="660" y="200" width="200" height="55" rx="5" fill="var(--orange)" fill-opacity=".12" stroke="var(--orange)" stroke-width="1"/>
+    <text x="760" y="218" font-size="10" fill="var(--text)" text-anchor="middle" font-weight="600">17+ External Services</text>
+    <text x="760" y="245" font-size="9" fill="var(--text-muted)" text-anchor="middle">via Istio sidecar proxies</text>
+    <!-- PubSub Layer -->
+    <rect x="20" y="360" width="860" height="40" rx="8" fill="none" stroke="var(--cyan)" stroke-width="1.5" stroke-dasharray="6,3"/>
+    <text x="40" y="385" font-size="11" fill="var(--cyan)" font-weight="700">GCP PUBSUB (13+ topics)</text>
+    <text x="300" y="385" font-size="9" fill="var(--text-muted)">campaign-trigger-events | campaign-stats | snapshots | integrations | stats-export | schedule | sequences | product-stats ...</text>
+    <!-- Data Layer -->
+    <rect x="20" y="420" width="860" height="90" rx="8" fill="none" stroke="var(--orange)" stroke-width="1.5" stroke-dasharray="6,3"/>
+    <text x="40" y="442" font-size="11" fill="var(--orange)" font-weight="700">DATA STORES</text>
+    <rect x="50" y="450" width="160" height="45" rx="5" fill="var(--orange)" fill-opacity=".12" stroke="var(--orange)" stroke-width="1"/>
+    <text x="130" y="468" font-size="10" fill="var(--text)" text-anchor="middle" font-weight="600">MongoDB Atlas</text>
+    <text x="130" y="485" font-size="9" fill="var(--text-muted)" text-anchor="middle">20+ collections</text>
+    <rect x="230" y="450" width="160" height="45" rx="5" fill="var(--orange)" fill-opacity=".12" stroke="var(--orange)" stroke-width="1"/>
+    <text x="310" y="468" font-size="10" fill="var(--text)" text-anchor="middle" font-weight="600">ClickHouse</text>
+    <text x="310" y="485" font-size="9" fill="var(--text-muted)" text-anchor="middle">Stats &amp; analytics</text>
+    <rect x="410" y="450" width="160" height="45" rx="5" fill="var(--orange)" fill-opacity=".12" stroke="var(--orange)" stroke-width="1"/>
+    <text x="490" y="468" font-size="10" fill="var(--text)" text-anchor="middle" font-weight="600">Redis (Memorystore)</text>
+    <text x="490" y="485" font-size="9" fill="var(--text-muted)" text-anchor="middle">Cache &amp; rate limits</text>
+    <rect x="590" y="450" width="140" height="45" rx="5" fill="var(--orange)" fill-opacity=".12" stroke="var(--orange)" stroke-width="1"/>
+    <text x="660" y="468" font-size="10" fill="var(--text)" text-anchor="middle" font-weight="600">GCS Buckets</text>
+    <text x="660" y="485" font-size="9" fill="var(--text-muted)" text-anchor="middle">Templates &amp; exports</text>
+    <rect x="750" y="450" width="120" height="45" rx="5" fill="var(--orange)" fill-opacity=".12" stroke="var(--orange)" stroke-width="1"/>
+    <text x="810" y="468" font-size="10" fill="var(--text)" text-anchor="middle" font-weight="600">Cloud Tasks</text>
+    <text x="810" y="485" font-size="9" fill="var(--text-muted)" text-anchor="middle">Delayed sends</text>
+    <!-- Arrows -->
+    <line x1="450" y1="80" x2="450" y2="100" stroke="var(--text-muted)" stroke-width="1" stroke-dasharray="3,2"/>
+    <line x1="350" y1="150" x2="350" y2="170" stroke="var(--text-muted)" stroke-width="1" stroke-dasharray="3,2"/>
+    <line x1="450" y1="340" x2="450" y2="360" stroke="var(--text-muted)" stroke-width="1" stroke-dasharray="3,2"/>
+    <line x1="450" y1="400" x2="450" y2="420" stroke="var(--text-muted)" stroke-width="1" stroke-dasharray="3,2"/>
+  </svg>
+
+  <h3>Helm Values Structure</h3>
+  <div class="card">
+    <pre style="font-size:12px;line-height:1.5;color:var(--text-muted);margin:0;overflow-x:auto;">apps/emails/deployments/
+├── staging/
+│   ├── values.server.staging.yaml          # API servers (type: multiserver)
+│   ├── values.leadgen-emails-*.yaml        # Workers (type: pubsub)
+│   └── jobs/                               # One-off migration jobs
+├── production/
+│   ├── values.server.production.yaml       # API servers (type: multiserver)
+│   ├── values.leadgen-emails-*.yaml        # Workers (type: pubsub)
+│   └── jobs/                               # One-off migration jobs
+└── beta/
+    └── values.server.beta.yaml             # Beta API server</pre>
+  </div>
+  <p style="font-size:13px;color:var(--text-muted);margin-top:8px;"><strong>Key fields in Helm values:</strong> <code>type</code> (multiserver | pubsub), <code>DeploymentName</code>, <code>autoscaling</code> (min/max/target), <code>resources</code> (CPU/mem requests), <code>sidecars</code> (Istio mesh allowlist), <code>envConfigsSecrets</code> (K8s secret refs), <code>serviceAccountName</code>.</p>
+</section>
+
+<!-- ════════════════ 14 DEPLOYMENT ════════════════ -->
 <section id="deploy">
-  <h2><span class="icon">🚢</span> 13 — Deployment & CI/CD</h2>
+  <h2><span class="icon">🚢</span> 14 — Deployment &amp; CI/CD</h2>
   <p class="section-desc">All deployments go through Jenkins. Frontend and backend have separate pipelines. Versioned deploys allow testing on isolated staging URLs before merging to the default staging branch.</p>
 
   <h3>Jenkins Pipelines</h3>
@@ -2151,9 +2401,9 @@
   </div>
 </section>
 
-<!-- ════════════════ 14 SETUP ════════════════ -->
+<!-- ════════════════ 15 SETUP ════════════════ -->
 <section id="setup">
-  <h2><span class="icon">🚀</span> 14 — New Developer Setup</h2>
+  <h2><span class="icon">🚀</span> 15 — New Developer Setup</h2>
   <p class="section-desc">Step-by-step guide to get the email ecosystem running locally for development.</p>
 
   <h3>Prerequisites</h3>
@@ -2416,7 +2666,7 @@
 
 <!-- ════════════════ 15 DEBUGGING ════════════════ -->
 <section id="debugging">
-  <h2><span class="icon">🐛</span> 15 — Debugging & Troubleshooting</h2>
+  <h2><span class="icon">🐛</span> 16 — Debugging & Troubleshooting</h2>
   <p class="section-desc">How to trace issues across the email ecosystem — from campaign creation to email delivery.</p>
 
   <h3>Tracing a Campaign End-to-End</h3>
