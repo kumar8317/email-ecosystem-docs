@@ -107,6 +107,15 @@
     <li><a href="#sendgrid">SendGrid / Twilio</a></li>
   </ul>
 
+  <h2>Plain-English deep-dive</h2>
+  <ul>
+    <li><a href="#tz-reality">Current tz reality (location vs browser)</a></li>
+    <li><a href="#glossary">Glossary of jargon</a></li>
+    <li><a href="#bucket-explained">Bucket approach — ELI5</a></li>
+    <li><a href="#klaviyo-explained">Klaviyo approach — ELI5</a></li>
+    <li><a href="#per-mode">Lead-time by schedule mode</a></li>
+  </ul>
+
   <h2>Design for our stack</h2>
   <ul>
     <li><a href="#recommendation">Recommended model</a></li>
@@ -386,6 +395,382 @@ bucket-consumer:
 
 <hr />
 
+<section id="tz-reality">
+<h2>Current tz reality — are we scheduling in browser or location timezone?</h2>
+
+<p><b>Answer: location timezone</b>, with browser-tz as a broken-handshake fallback.</p>
+
+<p>Trace through the stack:</p>
+<pre class="ascii">
+spm-ts (host app) ── EmailMicroApps.vue:294 / Builder.vue:307
+    timeZone: locationData.timezone           ← sub-account's tz from CRM
+      │  postMessage handshake
+      ▼
+ghl-email-builder ── App.vue:98
+    UPDATE_AUTH_INFO(model)
+      │
+      ▼
+store.state.timeZone = model.timeZone         ← still location.timezone
+
+Schedule.vue / ScheduleOptions.vue / DripScheduler.vue:
+    const timeZone = store.state.timeZone || dayjs.tz.guess()
+                     ^^^^^^^^^^^^^^^^^^^^    ^^^^^^^^^^^^^^^^^^
+                     normal path             fallback only
+      │  sent as meta.timeZone in API payload
+      ▼
+leadgen-marketplace-backend ── schedule-adapter.service.ts:18
+    scheduleModel.meta.timeZone = params.timeZone
+      │
+      ▼
+marketplace-backend / bulk-actions
+    sprintSchedule.locationTimeZone (interpretation anchor for 9:00 AM string)
+</pre>
+
+<h3>What the user actually sees</h3>
+<ul>
+  <li>The date/time picker shows the location's tz next to it (e.g. <code>America/New_York</code>).</li>
+  <li>Picking "9:00 AM" means "9:00 AM in the location's tz".</li>
+  <li>The tz dropdown in the modal is editable, so users can manually override. Default = location.</li>
+  <li><code>dayjs.tz.guess()</code> (browser tz) only fires when the spm-ts handshake fails to deliver a model — basically never in prod.</li>
+</ul>
+
+<div class="callout good">
+  <b>Implication for contact-tz feature:</b> the existing <code>meta.timeZone</code> field is
+  mis-named but semantically correct — it's "the reference tz the user picked 9am in". When
+  <code>sendInContactTimezone=true</code>, we keep this field as the <i>local clock value to replay per
+  contact</i>. No frontend refactor needed to define "what does 9:00 AM mean" — it's just a wall-clock
+  HH:mm string now replayed in each contact's tz.
+</div>
+</section>
+
+<hr />
+
+<section id="glossary">
+<h2>Glossary — jargon in plain English</h2>
+
+<h3>Hour-level vs minute-level granularity</h3>
+<p>
+  When a user picks "9 AM in contact's timezone", can we hit 9:00 exactly, or only somewhere in the 9 AM hour?
+</p>
+<ul>
+  <li><b>Hour-level</b> (Mailchimp) — "9 AM-ish". Breaks for India (UTC+5:30), Nepal (UTC+5:45), parts of Australia.</li>
+  <li><b>Minute-level</b> (HubSpot, Klaviyo, Braze, Iterable) — hit 9:00 exactly. Covers every offset on earth.</li>
+</ul>
+<p><b>Why minute is free for us:</b> <code>moment-timezone</code> already does minute math. No extra cost, no reason to pick the sloppier option. Pick minute.</p>
+
+<h3>"Lead time" and "floor"</h3>
+<ul>
+  <li><b>Lead time</b> = how far in advance the user schedules (e.g. "2 days from now" = 48h lead).</li>
+  <li><b>Floor</b> = minimum allowed. A "24h floor" means UI blocks anything &lt; 24h out.</li>
+</ul>
+<p>Why you need one: see <a href="#per-mode">Lead-time by schedule mode</a> below. TL;DR — the earliest tz bucket (UTC+14) could be ~26h behind the latest (UTC-12), so scheduling less than that in advance means some buckets are already in the past.</p>
+
+<h3>Dynamic-freeze late-comers</h3>
+<p>
+  Smart-list campaigns aren't a fixed list — they freeze the audience at the time of send. If the
+  campaign is filter-driven ("everyone tagged VIP"), new contacts matching the filter show up
+  <i>after</i> the campaign already started. Those are "late-comers".
+</p>
+<p>Scenario: campaign is "9 AM local". USA buckets fired yesterday. Alice from NYC joins the smart list today. What happens?</p>
+<ol>
+  <li><b>Send now</b> — Alice gets it immediately, not at 9 AM.</li>
+  <li><b>Drop</b> — Alice misses this campaign entirely.</li>
+  <li><b>Push to next day 9 AM</b> — Alice gets it on the next cycle.</li>
+</ol>
+<p>This is a product decision, not a tech one. Needs an answer before we build.</p>
+
+<h3>ML hour-prediction (future phase)</h3>
+<p>
+  Today: bucket assignment is <code>function(contact)</code> — "what's this contact's tz offset?".
+  Future (SFMC Einstein-style): <code>function(contact, campaign)</code> — "based on open/click history,
+  what hour works best for this contact on this kind of campaign?".
+</p>
+<p><b>Planning now:</b> write the bucket-assignment function to already take both args. Swapping in ML later doesn't require a rewrite.</p>
+
+<h3>Batch contact-tz lookup</h3>
+<p>
+  To bucketize, we need each contact's <code>timezone</code> field. Does a backend service exist
+  that takes 5,000 contact IDs and returns their timezones?
+</p>
+<ul>
+  <li>If yes → call it during bucketize, chunk to 5k per request.</li>
+  <li>If no → build a helper in <code>bulk-actions</code> with a short-lived Redis read-through cache (contacts rarely change tz).</li>
+</ul>
+</section>
+
+<hr />
+
+<section id="bucket-explained">
+<h2>Bucket approach — ELI5 (recommended for GHL)</h2>
+
+<h3>Layman version — the pizza flyer analogy</h3>
+<p>
+  You run a pizza shop. You want every customer on earth to get a flyer <b>at 9 AM their local
+  time</b>, no matter where they live.
+</p>
+
+<h4>The wrong way (per-contact tasks):</h4>
+<p>
+  For each of your 10 million customers, write a separate sticky note:
+  <i>"send flyer to Alice at 9 AM Alice-time"</i>, <i>"send flyer to Bob at 9 AM Bob-time"</i>, …
+  You now have 10 million sticky notes to manage, cancel, pause, monitor. You go insane.
+</p>
+
+<h4>The right way (buckets):</h4>
+<p>
+  Notice everyone in New York is on the same clock. Everyone in London too. In fact, the whole
+  planet only has about <b>38 different timezone offsets</b> (accounting for half-hour and 45-min
+  ones like India, Nepal, Chatham). So:
+</p>
+<ol>
+  <li>Get 38 baskets.</li>
+  <li>Drop every customer into the basket matching their tz offset.</li>
+  <li>Label each basket with <i>"when does 9 AM happen for this basket, in <b>your</b> (NY) wall-clock time?"</i>:
+    <ul>
+      <li>Basket New Zealand → send at 3 PM yesterday</li>
+      <li>Basket Tokyo → send at 7 PM yesterday</li>
+      <li>Basket India → send at 10:30 PM yesterday</li>
+      <li>Basket London → send at 4 AM today</li>
+      <li>Basket New York → send at 9 AM today</li>
+      <li>Basket LA → send at 12 PM today</li>
+    </ul>
+  </li>
+  <li>Set 38 alarms — one per basket. When each alarm rings, grab that basket and send its flyers.</li>
+</ol>
+<p>
+  Result: <b>10 million flyers, 38 alarms</b>. Customers get mail at 9 AM local. You stay sane.
+  Pause/cancel = turn off 38 alarms, not 10M.
+</p>
+
+<h3>Technical version</h3>
+<pre class="ascii">
+On campaign create:
+  1. Fetch audience (contact IDs + tz strings from contacts service)
+  2. For each contact:
+       bucketKey = utcOffsetMinutes(contact.timezone, scheduleDate)   // -300, -240, 330, 345…
+       buckets[bucketKey].contactIds.push(contact.id)
+       buckets[bucketKey].fireAtUtc = moment.tz("9:00 AM", contact.timezone).utc()
+  3. For each bucket:
+       write one row in BulkRequestBatches table
+       create ONE Cloud Task scheduled at bucket.fireAtUtc
+  4. Done. ≤38 rows, ≤38 Cloud Tasks, regardless of audience size.
+
+On each Cloud Task fire:
+  - Publishes PubSub messages (one per contact in the bucket)
+  - crm-contacts-bulk-email-v2-worker consumes (UNCHANGED from today)
+  - Worker calls /messages/bulk (UNCHANGED)
+  - Email delivered
+
+On pause/cancel:
+  - Iterate ≤38 batch rows
+  - Revoke each Cloud Task
+  - Done.
+
+On DRIP (batched drip):
+  - Per-bucket DRIP math: existing calculateNextBatchExecutionTime
+    called with batch.representativeTz (instead of single sprintSchedule.locationTimeZone)
+  - Everything else unchanged.
+</pre>
+
+<div class="callout good">
+  <b>Why it wins:</b> O(buckets) not O(contacts). Reuses 100% of the existing send pipeline. Extends
+  the existing <code>BulkRequestBatches</code> model by one field (<code>bucketKey</code>). Cost at 10M
+  audience: ~$0.00015 vs ~$400 for per-contact tasks.
+</div>
+</section>
+
+<hr />
+
+<section id="klaviyo-explained">
+<h2>Klaviyo approach — ELI5 (why we're <i>not</i> picking this)</h2>
+
+<h3>Layman version — the spreadsheet analogy</h3>
+<p>
+  Same pizza shop, different strategy. Klaviyo organizes itself like a giant Google Sheets. Every
+  customer has a row. One column is labeled <b>"next 9 AM for this person, expressed in NY time"</b>.
+  That column is kept fresh — updated every night, and re-updated whenever a customer's timezone changes.
+</p>
+<p>
+  Sending a campaign becomes a tiny query: <i>"hey sheet, show me all rows where 'next 9 AM' =
+  right now."</i> The sheet instantly returns that slice. Send the slice. One minute later, ask again.
+  Repeat forever.
+</p>
+<p>
+  Notice what changed: instead of sorting customers into baskets <i>for each campaign</i>, Klaviyo
+  keeps every customer <b>permanently labeled</b> with their next send slot. Campaign send is
+  just "query the column every minute".
+</p>
+
+<h4>Why would anyone do this?</h4>
+<ul>
+  <li>Customer updates their timezone today → label auto-recomputes → every in-flight campaign
+      automatically respects the new tz. No per-campaign rework.</li>
+  <li>New customer joins a smart list mid-campaign → their "next slot" label already exists, they
+      slot in naturally.</li>
+  <li>Want different send hours per contact (Alice at 10 AM, Bob at 2 PM, predicted by ML)? Trivial
+      — just change one column value.</li>
+</ul>
+
+<h4>The catch</h4>
+<p>
+  You need a database that can efficiently index a <b>constantly-moving time column</b> across
+  hundreds of millions of rows. Klaviyo uses a columnar analytics store (Snowflake-class) under
+  the hood. Firestore and MongoDB cannot do this at scale without building a custom secondary
+  index layer.
+</p>
+
+<h3>Technical version</h3>
+<pre class="ascii">
+Per-profile nightly job (and on-tz-change trigger):
+  for each profile:
+    profile.next_local_slot_utc = computeNextNineAM(profile.timezone)
+    // indexed timestamp column
+
+Campaign dispatcher cron (every 60s):
+  SELECT profile_id
+    FROM profiles
+    JOIN campaign_audience ON profiles.id = campaign_audience.profile_id
+   WHERE campaign_audience.campaign_id = C
+     AND profile.next_local_slot_utc BETWEEN now() AND now() + 1 minute
+  → emit per-profile messages → send pipeline
+
+On profile.timezone UPDATE trigger:
+  recompute profile.next_local_slot_utc
+  (all in-flight campaigns automatically benefit on next tick)
+</pre>
+
+<h3>Why GHL should NOT pick this — today</h3>
+<table>
+  <thead><tr><th>Requirement</th><th>Klaviyo has</th><th>GHL has</th></tr></thead>
+  <tbody>
+    <tr><td>Columnar store with fast range queries over 500M+ rows</td><td>Yes (Snowflake-class)</td><td>No — Firestore + Mongo + ES</td></tr>
+    <tr><td>Secondary time-index kept warm as values shift forward</td><td>Yes</td><td>Would need a new service layer</td></tr>
+    <tr><td>Global "now-tick" dispatcher serving all tenants in 60s</td><td>Yes</td><td>Doable but new infra</td></tr>
+    <tr><td>Effort to build at GHL scale</td><td>—</td><td>Multi-quarter project</td></tr>
+  </tbody>
+</table>
+
+<div class="callout warn">
+  <b>Strategic note:</b> Klaviyo's and the bucket model are <i>not</i> mutually exclusive. If we
+  later need per-contact custom hours (ML prediction, Einstein STO), we can layer the
+  materialized <code>next_local_slot_utc</code> field on top — the bucket becomes the <i>execution
+  unit</i> and the materialized column becomes the <i>assignment logic</i>. The bucket work is not
+  wasted.
+</div>
+</section>
+
+<hr />
+
+<section id="per-mode">
+<h2>Lead-time by schedule mode — the 27h rule explained</h2>
+
+<p>
+  Email Builder exposes several schedule modes. The contact-tz feature interacts with each
+  differently. A blanket "24h floor" is too blunt.
+</p>
+
+<h3>Why 27 hours, not 24?</h3>
+<p>Imagine you're in New York and you want every customer on earth to get an email at "9 AM their time tomorrow".</p>
+<ul>
+  <li>Max east offset on earth: UTC+14 (Kiribati)</li>
+  <li>Max west offset on earth: UTC-12 (Baker Island)</li>
+  <li>Spread: 26 hours</li>
+  <li>Plus half-hour offsets (Chatham +12:45): round up to <b>27 hours</b></li>
+</ul>
+<p>
+  If you click "Schedule" at 3 PM NY time, the Kiribati bucket needs to fire at <b>2 PM NY
+  time, already an hour ago</b>. Cannot honor it. To guarantee every bucket has a future
+  fire-time, the scheduled time must be at least 27 hours out.
+</p>
+
+<div class="callout good">
+  <b>Rule:</b>
+  <pre style="margin: 6px 0 0;"><code>if (sendInContactTimezone === true
+    && (scheduleStart - now) &lt; 27h) {
+  blockWithError('Scheduling in contact timezone requires at least 27h lead time')
+}</code></pre>
+</div>
+
+<h3>Schedule modes and how each interacts with contact-tz</h3>
+
+<p>From <code>apps/emails/src/schedule/dto/schedule.dto.ts</code>:</p>
+
+<table>
+  <thead>
+    <tr><th>Mode</th><th>Code</th><th>Behaviour today</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Send Now</td><td><code>NOW</code> / <code>SEND_NOW</code></td><td>Fire immediately. No <code>scheduleStart</code>.</td></tr>
+    <tr><td>Schedule Later</td><td><code>SCHEDULED</code> / <code>SEND_LATER</code></td><td>Fire at one future datetime.</td></tr>
+    <tr><td>Batch / Drip</td><td><code>DRIP</code></td><td>Batches over a window (days, start/end time, batch size, repeat-after).</td></tr>
+    <tr><td>Smart Send</td><td><code>SMART_SEND</code></td><td>Existing AI picks per-contact send time.</td></tr>
+    <tr><td>RSS</td><td><code>RSS</code></td><td>Recurring feed-driven sends.</td></tr>
+  </tbody>
+</table>
+
+<h3>Per-mode contact-tz rules</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>Mode</th>
+      <th>Contact-tz allowed?</th>
+      <th>Lead-time floor</th>
+      <th>Notes</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Send Now</td>
+      <td><span class="pill bad">No</span></td>
+      <td>N/A</td>
+      <td>No "9 AM" to resolve; fires immediately. UI: hide or disable the toggle when Send Now is selected. API: ignore the flag if set.</td>
+    </tr>
+    <tr>
+      <td>Schedule Later</td>
+      <td><span class="pill good">Yes</span></td>
+      <td><b>≥ 27h</b> from now</td>
+      <td>The classic case. UI picker disables any datetime &lt; now+27h. Helper text: <i>"Earliest available: Tuesday 12:00 AM (≥27h to cover all timezones)"</i>.</td>
+    </tr>
+    <tr>
+      <td>Batch / Drip</td>
+      <td><span class="pill good">Yes</span></td>
+      <td><b>≥ 27h</b> for first batch</td>
+      <td>Window is interpreted in <b>each contact's local clock</b>, not location clock. Example: "9 AM–5 PM, Mon/Wed/Fri" means 9–5 in Tokyo-local on Tokyo's Mon, 9–5 in NY-local on NY's Mon, etc. Subsequent batches auto-cascade per bucket — no extra lead-time rule.</td>
+    </tr>
+    <tr>
+      <td>Smart Send</td>
+      <td><span class="pill warn">Mutually exclusive</span></td>
+      <td>N/A</td>
+      <td>Smart Send already picks per-contact times. Contact-tz is a manual lower-fidelity version of the same idea. UI: the two toggles should be mutually exclusive. API: if both set, Smart Send wins.</td>
+    </tr>
+    <tr>
+      <td>RSS</td>
+      <td><span class="pill good">Yes</span></td>
+      <td><b>≥ 27h</b> for first recurrence</td>
+      <td>Each recurrence = a Schedule Later. Apply 27h to the first. Subsequent recurrences each get their own per-bucket resolution.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>What the Email Builder UI should enforce</h3>
+<ol>
+  <li>When <code>sendInContactTimezone</code> is toggled on, disable the "Send Now" radio with tooltip: <i>"Not available when sending in contact timezone."</i></li>
+  <li>Date/time picker min-selectable = <code>ceil(now + 27h, 15-min)</code> to match existing picker step.</li>
+  <li>Inline helper below the picker: <i>"Sent at 9:00 AM in each contact's timezone. Contacts without a timezone fall back to location timezone (set in Settings → Business Profile)."</i></li>
+  <li>When Smart Send is on, hide the contact-tz toggle entirely (or grey it out with tooltip <i>"Smart Send already optimizes per-contact send times"</i>).</li>
+  <li>On Drip window config, label the time range as <i>"9 AM–5 PM <b>in each contact's timezone</b>"</i> instead of <i>"location timezone"</i> when the flag is on.</li>
+</ol>
+
+<div class="callout">
+  <b>Summary:</b> "24h floor" → actually <b>27h floor</b>, only applies to Schedule Later / Drip
+  first-batch / RSS first-recurrence. Send Now and Smart Send don't apply. Drip window is
+  interpreted in contact's local clock, not location clock.
+</div>
+</section>
+
+<hr />
+
 <section id="recommendation">
 <h2>Recommended model for GHL</h2>
 
@@ -644,14 +1029,63 @@ function resolveContactTz(contact, location): string {
 
 <section id="open-questions">
 <h2>Open questions for product / architecture review</h2>
-<ol>
-  <li>Do we want hour-level (Mailchimp) or minute-level (HubSpot) granularity? Recommend minute (already free with moment.tz).</li>
-  <li>Lead-time floor — 24h is industry-standard. Do we want to allow 0h and silently fire past-due buckets immediately? (not recommended; causes support confusion).</li>
-  <li>Dynamic-freeze late-comers — send now, drop, or push to next day same local hour?</li>
-  <li>Does the Email Builder UI already have a per-contact-tz toggle visual mockup? If not, copy HubSpot's — it's the cleanest of the set.</li>
-  <li>Do we want an ML hour-prediction later (Phase 5)? If yes, bucket assignment must be a <code>function(contact, campaign)</code> not a pure <code>function(contact)</code> — plan for that seam now.</li>
-  <li>Which services own batch contact-tz lookup? If none exist, build in <code>bulk-actions</code> with a read-through cache.</li>
-</ol>
+<p class="muted">Each row now has a recommendation + where it's discussed in detail.</p>
+<table>
+  <thead>
+    <tr><th>#</th><th>Question</th><th>Recommendation</th><th>Detail</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>Hour-level (Mailchimp) vs minute-level (HubSpot) granularity?</td>
+      <td><b>Minute-level.</b> Free with <code>moment-timezone</code>; covers India +5:30, Nepal +5:45.</td>
+      <td><a href="#glossary">Glossary</a></td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>Lead-time floor — what value, and does it apply to every schedule mode?</td>
+      <td><b>27h floor</b>, but only on Schedule Later / Drip first-batch / RSS first-recurrence. Send Now and Smart Send don't apply.</td>
+      <td><a href="#per-mode">Lead-time by schedule mode</a></td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>Dynamic-freeze late-comers — send now, drop, or push to next 9 AM?</td>
+      <td>Product decision. Recommend <b>push to next recurrence</b> for Drip/RSS, <b>send at location tz</b> for Schedule Later (one-shot campaigns don't recur).</td>
+      <td><a href="#glossary">Glossary</a></td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>Email Builder UI — per-contact-tz toggle mockup exists?</td>
+      <td>If not, copy HubSpot's: single checkbox "Send in contact's time zone" with inline helper about fallback. Mutex with Smart Send.</td>
+      <td><a href="#per-mode">UI enforcement rules</a></td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>ML hour-prediction later (Phase 5)?</td>
+      <td>Keep the seam: bucket-assignment signature = <code>function(contact, campaign)</code> from day one. ML swap later is drop-in.</td>
+      <td><a href="#glossary">Glossary</a></td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>Batch contact-tz lookup — which service owns it?</td>
+      <td>If Contacts service has a batch-tz endpoint → use it. Otherwise build a helper in <code>bulk-actions</code> with Redis read-through cache.</td>
+      <td><a href="#glossary">Glossary</a></td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>Current <code>meta.timeZone</code> — is it browser or location tz?</td>
+      <td><b>Location tz</b> (with browser-tz as broken-handshake fallback). No frontend refactor needed; reuse the field as "wall-clock anchor" under the new flag.</td>
+      <td><a href="#tz-reality">Current tz reality</a></td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>Should we build Klaviyo-style per-profile materialization instead?</td>
+      <td><b>No, not today.</b> Needs a new columnar index layer GHL doesn't have. Bucket model gets 95% of value for ~5% of cost. Klaviyo layer is additive later if needed.</td>
+      <td><a href="#klaviyo-explained">Klaviyo ELI5</a></td>
+    </tr>
+  </tbody>
+</table>
+</section>
 </section>
 
 </main>
