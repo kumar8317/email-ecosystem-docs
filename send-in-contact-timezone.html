@@ -1,0 +1,660 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Send-in-Contact-Timezone — Architecture Study</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #151922;
+    --panel-2: #1b2030;
+    --text: #e6e8ee;
+    --muted: #9aa3b2;
+    --accent: #7aa2f7;
+    --accent-2: #9ece6a;
+    --warn: #e0af68;
+    --bad: #f7768e;
+    --border: #232838;
+    --code-bg: #0b0d13;
+    --code-border: #232838;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; font-size: 15px; line-height: 1.55; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+  code { background: var(--code-bg); border: 1px solid var(--code-border); padding: 1px 5px; border-radius: 4px; font-size: 0.88em; }
+  pre { background: var(--code-bg); border: 1px solid var(--code-border); padding: 14px 16px; border-radius: 8px; overflow-x: auto; font-size: 13px; line-height: 1.55; }
+  pre code { background: transparent; border: 0; padding: 0; }
+  h1, h2, h3, h4 { color: #fff; line-height: 1.25; margin: 1.4em 0 0.5em; }
+  h1 { font-size: 1.9rem; margin-top: 0; }
+  h2 { font-size: 1.4rem; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+  h3 { font-size: 1.12rem; color: var(--accent); }
+  h4 { font-size: 1rem; color: var(--accent-2); margin-bottom: 0.3em; }
+  p { margin: 0.6em 0; }
+  ul, ol { margin: 0.4em 0 0.8em; padding-left: 22px; }
+  li { margin: 0.25em 0; }
+  hr { border: 0; border-top: 1px solid var(--border); margin: 2em 0; }
+
+  .layout { display: grid; grid-template-columns: 280px 1fr; min-height: 100vh; }
+  aside {
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    padding: 20px 18px;
+    position: sticky; top: 0; align-self: start;
+    height: 100vh; overflow-y: auto;
+  }
+  aside h2 { font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 18px 0 8px; border: 0; padding: 0; }
+  aside h1 { font-size: 1rem; margin-bottom: 4px; }
+  aside .tag { display: inline-block; font-size: 0.7rem; color: var(--muted); margin-bottom: 18px; }
+  aside ul { list-style: none; padding: 0; margin: 0; }
+  aside li { margin: 2px 0; }
+  aside a { display: block; padding: 6px 10px; border-radius: 6px; color: var(--text); font-size: 0.9rem; }
+  aside a:hover { background: var(--panel-2); text-decoration: none; }
+  aside a.sub { padding-left: 22px; color: var(--muted); font-size: 0.85rem; }
+
+  main { padding: 36px 48px 80px; max-width: 980px; }
+  section { scroll-margin-top: 20px; }
+
+  table { width: 100%; border-collapse: collapse; margin: 1em 0; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--panel-2); color: #fff; font-weight: 600; }
+  tr:nth-child(even) td { background: #12151d; }
+
+  .callout { border-left: 3px solid var(--accent); background: var(--panel); padding: 10px 14px; border-radius: 6px; margin: 12px 0; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.bad { border-left-color: var(--bad); }
+  .callout.good { border-left-color: var(--accent-2); }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 0.72rem; background: var(--panel-2); color: var(--muted); margin-right: 4px; border: 1px solid var(--border); }
+  .pill.good { color: var(--accent-2); border-color: #2d3a24; }
+  .pill.warn { color: var(--warn); border-color: #4a3a1c; }
+  .pill.bad { color: var(--bad); border-color: #4a1f28; }
+
+  .ascii { font-size: 12.5px; }
+  .muted { color: var(--muted); }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+    aside { position: static; height: auto; }
+    .two-col { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<aside>
+  <h1>Send-in-Contact-Timezone</h1>
+  <span class="tag">Architecture study · Email Builder · Bulk Actions</span>
+
+  <h2>Overview</h2>
+  <ul>
+    <li><a href="#intro">Problem statement</a></li>
+    <li><a href="#current">Current GHL flow</a></li>
+    <li><a href="#universal-pattern">The universal pattern</a></li>
+  </ul>
+
+  <h2>Competitor deep-dives</h2>
+  <ul>
+    <li><a href="#mailchimp">Mailchimp · Timewarp</a></li>
+    <li><a href="#hubspot">HubSpot · Contact time zone</a></li>
+    <li><a href="#klaviyo">Klaviyo · Smart Send Time</a></li>
+    <li><a href="#braze">Braze · Intelligent Timing</a></li>
+    <li><a href="#iterable">Iterable · STO</a></li>
+    <li><a href="#customerio">Customer.io · Local send</a></li>
+    <li><a href="#sfmc">SFMC · Einstein STO</a></li>
+    <li><a href="#sendgrid">SendGrid / Twilio</a></li>
+  </ul>
+
+  <h2>Design for our stack</h2>
+  <ul>
+    <li><a href="#recommendation">Recommended model</a></li>
+    <li><a href="#hld">High-level design</a></li>
+    <li><a href="#lld">Low-level design</a></li>
+    <li><a href="#files">File-by-file changes</a></li>
+    <li><a href="#edge-cases">Edge cases</a></li>
+    <li><a href="#rollout">Rollout plan</a></li>
+    <li><a href="#observability">Observability</a></li>
+    <li><a href="#open-questions">Open questions</a></li>
+  </ul>
+</aside>
+
+<main>
+
+<section id="intro">
+<h1>Send-in-Contact-Timezone for Email Builder bulk actions</h1>
+<p class="muted">
+  Target: billions-scale "send at 9am local for each contact" without fanning out N per-contact tasks.
+  Study of how Mailchimp, HubSpot, Klaviyo, Braze, Iterable, Customer.io, SFMC, SendGrid handle it, then
+  a concrete design for GHL's <code>marketplace-backend/apps/bulk-actions</code>.
+</p>
+</section>
+
+<section id="current">
+<h2>Current GHL flow (what exists today)</h2>
+<pre class="ascii">
+Email Builder UI
+      │  schedule with sprintSchedule.locationTimeZone (single tz)
+      ▼
+leadgen-marketplace-backend / apps/emails
+  schedule.service.ts + util/service/bulk-action-api.ts
+      │  InternalRequest.post → bulk-actions API
+      ▼
+marketplace-backend / apps/bulk-actions
+  bulk_requests/bulk-requests.service.ts
+     persists BulkRequest with sprintSchedule { locationTimeZone,
+       batchExecutionDays, batchExecutionStartTime, batchExecutionEndTime,
+       batchRepeatAfter, batchRepeatType }
+     createCloudTaskForBulkPublish(..., scheduleStartAt)
+      │
+      ▼ (drip) calculateNextBatchExecutionTime uses ONE locationTimeZone
+      ▼
+  crm-contacts-bulk-email-v2-worker → /messages/bulk (per contact)
+</pre>
+<p>
+  Everything is bucketed by a <b>single</b> <code>sprintSchedule.locationTimeZone</code>.
+  There is no per-contact timing, no per-tz batching.
+</p>
+</section>
+
+<section id="universal-pattern">
+<h2>The universal pattern across every major ESP</h2>
+<p>
+  Every vendor at scale — Mailchimp, HubSpot, Klaviyo, Braze, Iterable, Customer.io, SFMC — converges on the
+  same primitive:
+</p>
+<div class="callout good">
+  <b>Shard the campaign by timezone <i>offset</i>, not by contact.</b>
+  24–48 static buckets cover every human on earth. One scheduled job per (campaign, bucket).
+  Bucket assignment is frozen at list-materialization time.
+</div>
+<p>Nobody fans out N Cloud Tasks for N contacts. The math simply does not work at 10M+ sends.</p>
+<p>Why offset and not IANA zone?</p>
+<ul>
+  <li>IANA has ~600 zones. Offsets collapse to ~38 real-world values (including half-hour and 45-min).</li>
+  <li>DST is resolved once at bucket-creation time — two contacts in <code>America/New_York</code> and <code>America/Toronto</code> land in the same <code>UTC-05</code> bucket.</li>
+  <li>Worker fan-out is O(buckets) not O(zones) or O(contacts).</li>
+</ul>
+</section>
+
+<hr />
+
+<section id="mailchimp">
+<h2>Mailchimp — <i>Timewarp</i></h2>
+
+<h3>Simple explanation</h3>
+<p>
+  You schedule a campaign for "9am". Mailchimp splits your audience into 24 "rings", one per hour of UTC offset.
+  The campaign is then sent 24 separate times, each ring firing when 9am arrives locally for that ring. It
+  requires you to schedule at least 24 hours in the future.
+</p>
+
+<h3>HLD</h3>
+<pre class="ascii">
+Campaign create ──► freeze audience ──► for each contact:
+                                          offset = round(tzOffset(contact)/60)
+                                          ring = offset ∈ [-12 .. +14]
+                                        write ring into a per-campaign audience snapshot
+
+Scheduler ──► at each UTC hour H, for every campaign:
+                find rings where (9am in ring-tz) == H UTC
+                emit "send campaign C, ring R" job
+                  └─► normal send pipeline
+
+Worker (per ring) ──► stream snapshot slice ──► render+MTA
+</pre>
+
+<h3>LLD notes</h3>
+<ul>
+  <li>Rings are <b>hour-granularity only</b> — India/Nepal/Aus half-hours get rounded (documented limitation).</li>
+  <li>Snapshot is immutable once taken. Contact tz edits mid-flight don't move the contact to a different ring.</li>
+  <li>24h lead time is enforced at UI validation time.</li>
+  <li>Unknown tz → ring of the account's default timezone (not UTC).</li>
+</ul>
+<p class="muted"><span class="pill good">strength</span> simple, predictable, cheap <span class="pill warn">weakness</span> hour granularity only, DST-boundary campaigns can stagger oddly.</p>
+</section>
+
+<section id="hubspot">
+<h2>HubSpot — <i>Send in contact's time zone</i></h2>
+
+<h3>Simple explanation</h3>
+<p>
+  Same family as Mailchimp but uses ~38 buckets to cover half-hour and 45-minute offsets
+  (India +5:30, Nepal +5:45, Chatham +12:45). A contact without timezone falls into the portal's
+  default tz bucket.
+</p>
+
+<h3>HLD</h3>
+<pre class="ascii">
+audience snapshot rows:  { contactId, campaignId, tzOffsetMinutes }
+
+dispatcher cron (every 15 min):
+  for each campaign scheduled for localHour=H, localMinute=M:
+    target_utc = H:M − offset
+    SELECT contactId WHERE tzOffsetMinutes=offset AND campaignId=C
+    enqueue "send slice" on internal send queue
+</pre>
+
+<h3>LLD notes</h3>
+<ul>
+  <li>15-minute dispatcher tick = minimum granularity they can honor.</li>
+  <li>The snapshot row is partitioned by <code>(campaignId, tzOffsetMinutes)</code>; that becomes a natural Kafka key.</li>
+  <li>They explicitly document "contact must have a <code>ip_timezone</code> or <code>hs_timezone</code> property" — that resolution happens at enrollment, not at send.</li>
+  <li>DST crossover: offset is resolved at snapshot time, so a campaign scheduled across DST can drift by 1h for some contacts. Documented. Not fixed.</li>
+</ul>
+<p class="muted"><span class="pill good">strength</span> half-hour accuracy <span class="pill warn">weakness</span> 15-min tick floor; DST-edge drift.</p>
+</section>
+
+<section id="klaviyo">
+<h2>Klaviyo — <i>Smart Send Time / Local Time</i></h2>
+
+<h3>Simple explanation</h3>
+<p>
+  Klaviyo pre-computes on every profile a materialized field: <code>next_local_slot_utc</code> —
+  "if this person were to receive a 9am-local send today, what UTC time would that be?". The
+  campaign dispatcher just queries "who has a slot matching now?" every minute.
+</p>
+
+<h3>HLD</h3>
+<pre class="ascii">
+profile doc
+  ├── timezone
+  └── next_local_slot_utc   ← recomputed nightly + on tz change
+
+campaign dispatcher (1-min tick):
+  SELECT profileId FROM profiles
+    JOIN campaign_audience
+   WHERE next_local_slot_utc BETWEEN now AND now+1min
+     AND campaign_audience.campaignId = C
+  → chunk into send-batches → send pipeline
+</pre>
+
+<h3>LLD notes</h3>
+<ul>
+  <li>Computation is <b>profile-side, not campaign-side</b> — one write per profile per day, amortized.</li>
+  <li>Works because Klaviyo's profile store is its own OLAP-capable columnar system (Snowflake-like under the hood).</li>
+  <li>Doesn't scale to Firestore / MongoDB-primary shops without a secondary index layer.</li>
+  <li>Reacts to tz changes within 24h without re-snapshotting campaigns.</li>
+</ul>
+<p class="muted"><span class="pill good">strength</span> handles late-join profiles, tz edits <span class="pill bad">weakness</span> requires a profile store that can index a changing time column at scale.</p>
+</section>
+
+<section id="braze">
+<h2>Braze — <i>Intelligent Timing / Local Time Delivery</i></h2>
+
+<h3>Simple explanation</h3>
+<p>
+  Braze runs per-offset "tick workers" — one logical worker per tz bucket, each woken by a cron
+  every minute. When a worker's local-clock hits 9:00, it drains the slice of the campaign
+  audience assigned to its bucket.
+</p>
+
+<h3>HLD</h3>
+<pre class="ascii">
+campaign create ──► partition audience into 38 buckets, each stored as Kafka topic partition
+                    keyed by (campaignId, tzBucket)
+
+tick_worker_{bucket}:
+  every minute:
+    if localTime(bucket) == campaign.scheduledLocal:
+      consume partition (campaignId, bucket) → send pipeline
+</pre>
+
+<h3>LLD notes</h3>
+<ul>
+  <li>Single-threaded per-partition ordering guarantees — useful for rate-limited send domains.</li>
+  <li>Bucket worker is lightweight; real send concurrency comes from downstream MTA workers.</li>
+  <li>Campaign pause/resume = pause Kafka consumer on that partition. No per-contact task revocation.</li>
+  <li>Offset resolution at <i>audience-freeze</i> time; tz edits after freeze ignored.</li>
+</ul>
+<p class="muted"><span class="pill good">strength</span> ordered sends, cheap cancel <span class="pill warn">weakness</span> needs Kafka-style partitioned queue.</p>
+</section>
+
+<section id="iterable">
+<h2>Iterable — <i>Send Time Optimization (STO)</i></h2>
+
+<h3>Simple explanation</h3>
+<p>
+  Nearly identical to Braze — Kafka topic per (campaign, tz-offset-bucket), a scheduler
+  service emits "bucket is due" events that consumer workers claim.
+</p>
+
+<h3>HLD</h3>
+<pre class="ascii">
+scheduler:
+  cron-like timer evaluates every campaign × bucket pair
+  when due → publish "bucket-ready" event with partition key (campaignId, bucket)
+
+bucket-consumer:
+  pulls slice from audience store → render → MTA
+</pre>
+
+<h3>LLD notes</h3>
+<ul>
+  <li>Explicitly documents 38 distinct tz offsets supported globally.</li>
+  <li>STO-with-ML (predicted per-contact best-hour) layers on top of the bucketing system — not a replacement. The ML output is "choose which bucket this contact lands in", not "give this contact its own task".</li>
+</ul>
+</section>
+
+<section id="customerio">
+<h2>Customer.io — <i>Local Send Time</i></h2>
+
+<h3>Simple explanation</h3>
+<p>
+  Campaign create time resolves each contact's offset from the profile's <code>timezone</code>
+  attribute. Up to 24 separate queues are built, each with its own fire-at-UTC time. Contacts
+  with no tz go to the workspace-default queue.
+</p>
+
+<h3>HLD / LLD notes</h3>
+<ul>
+  <li>Publicly documented: "we build up to 24 queues per campaign".</li>
+  <li>Uses their own delayed-job store; each queue has one delayed job, not N.</li>
+  <li>Unknown-tz handling is explicit and configurable at workspace level.</li>
+</ul>
+</section>
+
+<section id="sfmc">
+<h2>SFMC — <i>Einstein STO</i></h2>
+
+<h3>Simple explanation</h3>
+<p>
+  Two features stacked. STO-classic is offset-bucketing (24 buckets, ~hour granularity).
+  Einstein STO adds an ML layer that picks, per contact, <i>which</i> local hour to use
+  (based on open history). The underlying dispatch is still bucketed — the ML only
+  decides bucket-assignment.
+</p>
+
+<h3>LLD notes</h3>
+<ul>
+  <li>Even the ML variant quantizes to 15-min slots and collapses into finite buckets.</li>
+  <li>Batch evaluation runs nightly on Marketing Cloud's data cloud — not at send time.</li>
+</ul>
+</section>
+
+<section id="sendgrid">
+<h2>SendGrid / Twilio</h2>
+<p>
+  SendGrid's transactional API intentionally does <b>not</b> offer "send in contact timezone" —
+  the pipeline is a global queue with rate limiting. Timezone-aware scheduling is the caller's
+  responsibility (Twilio Engage / Journeys implements it, and uses the same bucketing pattern
+  above internally).
+</p>
+<p class="muted"><span class="pill warn">lesson</span> don't bake tz logic into the send layer; bake it into the bulk-action layer. That matches GHL's current split.</p>
+</section>
+
+<hr />
+
+<section id="recommendation">
+<h2>Recommended model for GHL</h2>
+
+<div class="callout good">
+  <b>Offset-bucket sharding, materialized at bulk-request create, one Cloud Task per bucket,
+  existing <code>sprintSchedule</code> math reused per bucket.</b>
+  <br />This is the common denominator of every competitor at billion-scale.
+</div>
+
+<h3>Why not per-contact tasks (Approach A)?</h3>
+<table>
+  <thead><tr><th>Dimension</th><th>Per-contact tasks</th><th>Offset buckets</th></tr></thead>
+  <tbody>
+    <tr><td>Tasks created for 10M audience</td><td>10,000,000</td><td>≤ 38</td></tr>
+    <tr><td>Cloud Tasks cost</td><td>~$400 / campaign</td><td>&lt; $0.01</td></tr>
+    <tr><td>Cancel / pause</td><td>revoke 10M tasks</td><td>revoke ≤ 38</td></tr>
+    <tr><td>Queue dispatch quota risk</td><td>500/s default → 5.5h just to fire</td><td>N/A</td></tr>
+    <tr><td>Observability</td><td>impossible to eyeball</td><td>one row per bucket</td></tr>
+    <tr><td>Matches existing DRIP logic</td><td>no — rewrite</td><td>yes — same math, new key</td></tr>
+  </tbody>
+</table>
+
+<h3>Why not Klaviyo-style profile materialization?</h3>
+<p>
+  It's the cleanest model functionally, but requires a secondary index on a time column across
+  hundreds of millions of contacts. GHL's contact store is Firestore/Mongo + Elasticsearch — feasible
+  but a multi-quarter investment. Bucketing gets 95% of the value for 5% of the effort and is the
+  natural extension of the existing <code>BulkRequestBatches</code> model.
+</p>
+</section>
+
+<section id="hld">
+<h2>High-level design</h2>
+<pre class="ascii">
+Email Builder UI
+  │  new flag: sendInContactTimezone = true
+  │  + 24h lead-time validation
+  ▼
+leadgen-marketplace-backend / apps/emails
+  schedule.dto.ts            ← add flag
+  schedule.service.ts        ← pass flag through
+  util/service/bulk-action-api.ts
+                             ← forward into sprintSchedule.sendInContactTimezone
+  ▼
+marketplace-backend / apps/bulk-actions
+  bulk_requests/bulk-requests.service.ts  ── persist path
+    if sprintSchedule.sendInContactTimezone:
+      1. page audience (documentIds OR filter slice)
+      2. resolve each contact's tz honoring location.disableContactTimezone
+      3. group into ≤38 offset buckets
+      4. for each bucket → create BulkRequestBatches row with:
+             { bucketKey, representativeTz, contactIds slice,
+               executionTime = scheduleStartLocal resolved in representativeTz }
+      5. for each bucket → createCloudTaskForBulkPublish(executionTime)
+    else:
+      existing single-batch path (unchanged)
+
+  publishBulkRequest(batch)
+    → existing fanout: crm-contacts-bulk-email-v2-events pubsub
+    → existing worker → /messages/bulk
+    (no change downstream of the bucket)
+</pre>
+</section>
+
+<section id="lld">
+<h2>Low-level design</h2>
+
+<h3>1. DTO additions</h3>
+<pre><code>// leadgen-marketplace-backend/apps/emails/src/schedule/dto/schedule.dto.ts
+sendInContactTimezone?: boolean
+fallbackToLocationTimezone?: boolean   // default true
+
+// marketplace-backend/apps/bulk-actions/src/bulk_requests/dto/bulk-request.create.ts
+class SprintSchedule {
+  ...existing fields...
+  @IsOptional() @IsBoolean()
+  sendInContactTimezone?: boolean
+
+  @IsOptional() @IsBoolean()
+  fallbackToLocationTimezone?: boolean   // default true
+}</code></pre>
+
+<h3>2. Bucket model</h3>
+<pre><code>type TzBucket = {
+  bucketKey: number          // offset minutes, e.g. -300, -240, 330, 345
+  representativeTz: string   // 'America/New_York', 'Asia/Kolkata', etc.
+  contactIds: string[]       // or { filter, cursor } for filtered campaigns
+  executionTime: Date        // UTC = scheduleStartLocal resolved via representativeTz
+  cloudTaskId?: string
+}</code></pre>
+
+<h3>3. BulkRequestBatches row extension</h3>
+<pre><code>// apps/bulk-actions/src/models/firestore/bulk_request_batches.ts (or mongoose equiv)
+interface BulkRequestBatch {
+  ...existing...
+  bucketKey?: number
+  representativeTz?: string
+  contactCount: number
+}</code></pre>
+<p>Composite index: <code>(bulkRequestId, bucketKey)</code>. Existing <code>batchNumber</code> still works for non-tz flow.</p>
+
+<h3>4. Bucketing algorithm</h3>
+<pre><code>function bucketize(audience, location, scheduleStartLocal) {
+  const buckets = new Map&lt;number, TzBucket&gt;()
+  const locTz = location.timeZone
+
+  for (const contact of audience) {
+    const tz =
+      contact.timezone && !location.disableContactTimezone
+        ? contact.timezone
+        : locTz
+
+    const offsetMin = moment.tz(scheduleStartLocal, tz).utcOffset()
+    if (!buckets.has(offsetMin)) {
+      buckets.set(offsetMin, {
+        bucketKey: offsetMin,
+        representativeTz: tz,         // first contact's tz; only for display
+        contactIds: [],
+        executionTime: moment.tz(scheduleStartLocal, tz).utc().toDate()
+      })
+    }
+    buckets.get(offsetMin).contactIds.push(contact.id)
+  }
+  return [...buckets.values()]
+}</code></pre>
+
+<h3>5. Cloud Task creation loop</h3>
+<pre><code>for (const bucket of buckets) {
+  const batch = await BulkRequestBatches.create({
+    bulkRequestId,
+    bucketKey: bucket.bucketKey,
+    representativeTz: bucket.representativeTz,
+    executionTime: bucket.executionTime,
+    contactCount: bucket.contactIds.length,
+    status: 'scheduled'
+  })
+
+  const task = await createCloudTaskForBulkPublish(
+    { bulkRequestId, batchNumber: batch.batchNumber, bucketKey: bucket.bucketKey,
+      locationId, scheduleType: IBulkActionScheduleType.SCHEDULED },
+    bucket.executionTime
+  )
+  batch.cloudTask = { id: task.id }
+  await batch.save()
+}</code></pre>
+
+<h3>6. publishBulkRequest — DRIP path</h3>
+<p>
+  Today DRIP reads <code>sprintSchedule.locationTimeZone</code> once. New code path:
+</p>
+<pre><code>// bulk-requests.service.ts ~L656
+const tzForCalc = batch.representativeTz ?? sprintSchedule.locationTimeZone
+const nextExecutionTime = calculateNextBatchExecutionTime(
+  { ...sprintSchedule, locationTimeZone: tzForCalc },
+  previousExecutionTime
+)</code></pre>
+<p>Everything else in DRIP continues to work unchanged.</p>
+
+<h3>7. Contact-tz resolution helper (reuse existing semantics)</h3>
+<pre><code>// honors the same rule as calendars & conversations templateParams
+function resolveContactTz(contact, location): string {
+  if (contact?.timezone && location?.disableContactTimezone === false) {
+    return contact.timezone
+  }
+  return location.timeZone
+}</code></pre>
+<p>
+  References (existing code, same semantic):
+  <code>marketplace-backend/apps/calendars-integrations/.../googleEvent.ts:279</code>,
+  <code>marketplace-backend/apps/conversations/.../templateParams/index.ts:312</code>.
+</p>
+
+<h3>8. Audience paging for large campaigns</h3>
+<p>
+  For >1M audiences the bucketing step must be streamed. Options in order of preference:
+</p>
+<ol>
+  <li><b>Contact-service batch tz lookup</b> — <code>POST /contacts/timezones</code> with 5k ids → array of tz strings. Most services already have this internally.</li>
+  <li><b>Elasticsearch scan</b> — the smart-list / filter path already paginates via ES. Add <code>timezone</code> to the <code>_source</code> projection.</li>
+  <li><b>Async materialization worker</b> — if audience >100k, persist <code>status=bucketizing</code>, enqueue a worker that pages through, writes batch rows, and flips to <code>status=scheduled</code>. Return 202 immediately.</li>
+</ol>
+</section>
+
+<section id="files">
+<h2>File-by-file changes</h2>
+
+<h3>leadgen-marketplace-backend</h3>
+<table>
+  <thead><tr><th>File</th><th>Change</th></tr></thead>
+  <tbody>
+    <tr><td><code>apps/emails/src/schedule/dto/schedule.dto.ts</code></td><td>Add <code>sendInContactTimezone</code>, <code>fallbackToLocationTimezone</code> on the schedule meta &amp; sprint schedule DTOs.</td></tr>
+    <tr><td><code>apps/emails/src/schedule/schedule.service.ts</code></td><td>Persist flag into <code>meta.bulkReqInfo.sprintSchedule</code>; surface it via update endpoints; validate ≥24h lead time when flag is on.</td></tr>
+    <tr><td><code>apps/emails/src/schedule/schedule-adapter.service.ts</code></td><td>Round-trip flag between schedule model and bulk-req payload.</td></tr>
+    <tr><td><code>apps/emails/src/util/service/bulk-action-api.ts</code></td><td><code>startV1BulkActions</code> / <code>startBulkTagAddActionInternal</code>: forward flag into <code>sprintSchedule</code>.</td></tr>
+    <tr><td><code>apps/emails/src/util/constHelper.ts</code></td><td>New const <code>SEND_IN_CONTACT_TZ_MIN_LEAD_HOURS = 24</code>.</td></tr>
+    <tr><td><code>apps/emails/src/campaigns/dto/bulk-action.dto.ts</code></td><td>If campaigns-side DTO exposes sprintSchedule, mirror the flag.</td></tr>
+  </tbody>
+</table>
+
+<h3>marketplace-backend</h3>
+<table>
+  <thead><tr><th>File</th><th>Change</th></tr></thead>
+  <tbody>
+    <tr><td><code>apps/bulk-actions/src/bulk_requests/dto/bulk-request.create.ts</code></td><td>Add <code>sendInContactTimezone</code>, <code>fallbackToLocationTimezone</code> on <code>SprintSchedule</code>.</td></tr>
+    <tr><td><code>apps/bulk-actions/src/models/firestore/bulk_request_batches.ts</code></td><td>Add <code>bucketKey</code>, <code>representativeTz</code>, <code>contactCount</code> fields + composite index <code>(bulkRequestId, bucketKey)</code>.</td></tr>
+    <tr><td><code>apps/bulk-actions/src/models/firestore/bulk_request_v2.ts</code></td><td>Persist flag on request so pause/resume/cancel round-trips.</td></tr>
+    <tr><td><code>apps/bulk-actions/src/bulk_requests/bulk-requests.service.ts</code></td><td>Core change: bucketize at persist time when flag=true, emit one Cloud Task per bucket; DRIP path reads <code>batch.representativeTz</code> instead of root <code>sprintSchedule.locationTimeZone</code>.</td></tr>
+    <tr><td><code>apps/bulk-actions/src/helpers/date.ts</code></td><td>No signature change needed — <code>calculateNextBatchExecutionTime</code> already accepts <code>locationTimeZone</code>.</td></tr>
+    <tr><td><code>apps/bulk-actions/src/helpers/bulk_requests.ts</code></td><td>Add <code>bucketize(audience, location, scheduleStartLocal)</code> helper + unit tests.</td></tr>
+    <tr><td><code>apps/bulk-actions/src/services/</code> (new)</td><td><code>contact-timezone.service.ts</code> — batch tz lookup wrapper.</td></tr>
+    <tr><td><code>apps/bulk-actions/workers/crm-contacts-bulk-action-freeze-list-worker.ts</code></td><td>If dynamic-freeze population runs after create, read the flag and assign newly-frozen contacts to the correct bucket (or location-tz bucket if all buckets fired).</td></tr>
+    <tr><td><code>apps/bulk-actions/workers/crm-contacts-bulk-email-v2-worker.ts</code></td><td><b>No change</b> — it still consumes one contact per message.</td></tr>
+  </tbody>
+</table>
+</section>
+
+<section id="edge-cases">
+<h2>Edge cases (every competitor hits these)</h2>
+<ol>
+  <li><b>Half-hour / 45-min offsets</b> — India +5:30, Nepal +5:45, Chatham +12:45. Bucket key must be minutes, not hours. Validate against 38 real-world offsets; reject malformed tz strings to a <i>location-tz fallback bucket</i>.</li>
+  <li><b>DST crossover campaigns</b> — a 9am Sun→Mon campaign spans the EU/US DST change. Offset resolved at freeze time; accept 1h drift for some contacts. Document behavior; match Mailchimp/HubSpot.</li>
+  <li><b>Unknown tz</b> — if <code>contact.timezone</code> missing or <code>location.disableContactTimezone === true</code>, assign to the <code>location.timeZone</code> bucket. Never drop.</li>
+  <li><b>Dynamic freeze mid-campaign</b> — contacts added after initial freeze: assign to the bucket whose send window hasn't fired; if all have fired, fall back to "send now" or drop per workspace preference.</li>
+  <li><b>Pause / cancel</b> — iterate <code>BulkRequestBatches</code> rows for the request; revoke each <code>cloudTask.id</code>. Existing code already iterates batches — just works with more of them.</li>
+  <li><b>Lead-time clamp</b> — if <code>scheduleStartLocal − now &lt; 24h</code>, the earliest buckets (e.g. UTC+14) will already be in the past. Block at UI; if API, return 459 with existing error key.</li>
+  <li><b>Rate limits</b> — buckets fire in a narrow UTC band. Downstream rate limiting (conversations-outbound / MTA) already handles this, but observability should show per-bucket throughput so the top-heavy buckets (UTC-05, UTC+05:30) get visibility.</li>
+  <li><b>Bucket cardinality cap</b> — clamp to 38 known offsets. If a contact's tz resolves to a weirdly-rounded offset (bad data), map to nearest known bucket, log a warning.</li>
+</ol>
+</section>
+
+<section id="rollout">
+<h2>Rollout plan</h2>
+<ol>
+  <li><b>Phase 0</b> — Feature flag <code>bulk_actions.sendInContactTimezone</code> at location level. Default off.</li>
+  <li><b>Phase 1</b> — Backend-only: accept flag, bucketize, create per-bucket batches, emit Cloud Tasks. Ship behind flag for internal accounts.</li>
+  <li><b>Phase 2</b> — UI toggle in Email Builder schedule modal + 24h lead-time validation. Enable for design-partner locations.</li>
+  <li><b>Phase 3</b> — Monitor bucket distribution, fire-time drift, downstream MTA pressure. Tune.</li>
+  <li><b>Phase 4</b> — GA to all locations.</li>
+  <li><b>Phase 5 (optional)</b> — ML layer (Einstein-style): predict per-contact best local hour, assign bucket accordingly. Reuses entire pipeline; only the per-contact target hour changes.</li>
+</ol>
+</section>
+
+<section id="observability">
+<h2>Observability — emit from day one</h2>
+<ul>
+  <li><code>bulk_request_bucket_count{campaignId}</code> — number of buckets created.</li>
+  <li><code>bulk_request_bucket_size{campaignId, bucketKey}</code> — contacts per bucket.</li>
+  <li><code>bulk_request_bucket_scheduled_at{campaignId, bucketKey}</code> — UTC fire time.</li>
+  <li><code>bulk_request_bucket_fired_at{campaignId, bucketKey}</code> — actual fire time → compute drift.</li>
+  <li><code>bulk_request_bucket_completed_at{campaignId, bucketKey}</code>.</li>
+  <li><code>bulk_request_unknown_tz_count{campaignId}</code> — contacts that fell to location-tz fallback.</li>
+  <li>Structured log on bucketize: <code>{ campaignId, totalContacts, buckets: [{key, size, tz}], unknownTzCount }</code>.</li>
+</ul>
+<p>Support will ask for per-bucket metrics within a week of launch. Having them on day one is worth the 30 minutes.</p>
+</section>
+
+<section id="open-questions">
+<h2>Open questions for product / architecture review</h2>
+<ol>
+  <li>Do we want hour-level (Mailchimp) or minute-level (HubSpot) granularity? Recommend minute (already free with moment.tz).</li>
+  <li>Lead-time floor — 24h is industry-standard. Do we want to allow 0h and silently fire past-due buckets immediately? (not recommended; causes support confusion).</li>
+  <li>Dynamic-freeze late-comers — send now, drop, or push to next day same local hour?</li>
+  <li>Does the Email Builder UI already have a per-contact-tz toggle visual mockup? If not, copy HubSpot's — it's the cleanest of the set.</li>
+  <li>Do we want an ML hour-prediction later (Phase 5)? If yes, bucket assignment must be a <code>function(contact, campaign)</code> not a pure <code>function(contact)</code> — plan for that seam now.</li>
+  <li>Which services own batch contact-tz lookup? If none exist, build in <code>bulk-actions</code> with a read-through cache.</li>
+</ol>
+</section>
+
+</main>
+</div>
+</body>
+</html>
